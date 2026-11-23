@@ -20,7 +20,7 @@ Aplikacja do robienia rolek na Instagram i TikTok dla gabinetu beauty: od nagra�
    python -m pip install --no-deps mediapipe absl-py
    python -m pip install onnxruntime ultralytics faster-whisper
    ```
-3. Pobierz repozytorium (przycisk **Code > Download ZIP** albo `git clone`) i rozpakuj, np. na Pulpit.
+3. Rozpakuj paczkę `panel-rolek_<data>.zip` od autora (albo pobierz repozytorium, jeśli masz do niego dostęp), np. na Pulpit. W paczce jest też `JAK_ZAINSTALOWAC.txt`.
 4. Uruchom **`Uruchom panel.bat`**. Otworzy się przeglądarka z panelem.
 5. **Wpisz kod licencyjny** (`ROLKI-XXXX-XXXX-XXXX`). Wystarczy raz na komputerze.
 6. Przejdź kreator: imię, gabinet, konta, wygląd marki (także ze strony www). Na końcu kreator sprawdzi programy i pokaże komendy do brakujących.
@@ -37,6 +37,10 @@ W repozytorium jest sam kod aplikacji, szablony scen i dokumentacja. Nie ma tu i
 - muzyki z licencją (zwykle nie wolno jej rozpowszechniać) i modeli AI (`narzedzia/`).
 
 Wszystko to jest w `.gitignore`.
+
+## Dla autora: paczka do wysłania
+
+`npm run paczka` robi na Pulpicie `panel-rolek_<data>.zip`: dokładnie ostatni commit (`git archive`), plus `JAK_ZAINSTALOWAC.txt` i `WERSJA.txt`. Odbiorczyni nie potrzebuje konta na GitHubie: wysyłasz paczkę linkiem (Google Drive, WeTransfer) razem z jednym kodem. Przed wysłaniem skrypt sprawdza, czy w ZIP-ie nie ma prywatnych plików. Nowa wersja: commit, `npm run paczka`, wyślij; odbiorczyni rozpakowuje w miejsce starej (nagrania, ustawienia i aktywacja zostają).
 
 ## Licencja
 

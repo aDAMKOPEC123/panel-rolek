@@ -45,7 +45,8 @@
     "styl": "node scripts/style-marki.mjs",
     "plan": "node scripts/plan-tygodnia.mjs",
     "pomysly": "node scripts/szybkie-pomysly.mjs",
-    "instagram": "node scripts/instagram.mjs"
+    "instagram": "node scripts/instagram.mjs",
+    "paczka": "node scripts/paczka.mjs"
   },
   "engines": {
     "node": ">=22"
