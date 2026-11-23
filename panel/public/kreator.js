@@ -1,9 +1,11 @@
-// Kreator pierwszego uruchomienia: pełnoekranowa nakładka w 5 krokach (panel/kreator.mjs, API /api/kreator, /api/profil, /api/programy).
+// Kreator pierwszego uruchomienia: pełnoekranowa nakładka w 6 krokach (wywiad o gabinecie: krok „gabinet”, scripts/gabinet.mjs) (panel/kreator.mjs, API /api/kreator, /api/profil, /api/programy).
 // Pokazuje się sam, dopóki config.json nie ma znacznika kreator.zrobiony; później: „⚙ Ustawienia gabinetu”.
 "use strict";
 
-const KR = { krok: 0, dane: {}, programy: null, strona: null, otwarty: false };
-const KROKI_KREATORA = ["👋 Ty i gabinet", "📱 Gdzie publikujesz", "🎨 Wygląd marki", "🔧 Programy", "🎉 Gotowe"];
+const KR = { krok: 0, pod: 0, dane: {}, gab: null, programy: null, strona: null, otwarty: false };
+// kroki po nazwie (id), nie po numerze: nowy krok = nowa pozycja tutaj
+const KROKI_KREATORA = [["profil", "👋 Ty i gabinet"], ["gabinet", "🏥 O gabinecie"], ["publikacja", "📱 Gdzie publikujesz"], ["wyglad", "🎨 Wygląd marki"], ["programy", "🔧 Programy"], ["gotowe", "🎉 Gotowe"]];
+const idKroku = () => KROKI_KREATORA[KR.krok][0];
 const bezTodo = (v) => (v && !/^todo$/i.test(String(v).trim()) ? String(v) : "");
 
 async function otworzKreator(krok = 0) {
@@ -11,7 +13,9 @@ async function otworzKreator(krok = 0) {
   try { d = await api("/api/kreator"); } catch (e) { return blad(e); }
   const g = d.gabinet || {};
   KR.dane = { osoba: bezTodo(g.osoba), nazwa: bezTodo(g.nazwa), miasto: bezTodo(g.miasto), instagram: bezTodo(g.instagram), tiktok: bezTodo(g.tiktok), link_w_bio: bezTodo(g.link_w_bio), uslugi: g.uslugi || [], cta: bezTodo(d.cta?.domyslne) };
-  KR.krok = krok; KR.strona = null; KR.otwarty = true;
+  KR.krok = krok; KR.pod = 0; KR.strona = null; KR.otwarty = true;
+  KR.gab = (await api("/api/gabinet").catch(() => ({}))).profil || { zabiegi: [] };
+  if (!KR.gab.zabiegi) KR.gab.zabiegi = [];
   let el = $("#kreator");
   if (!el) { el = document.createElement("div"); el.id = "kreator"; document.body.appendChild(el); }
   el.classList.remove("ukryte");
@@ -27,20 +31,21 @@ function rysujKreator() {
   const el = $("#kreator");
   const k = KR.krok;
   el.innerHTML = `<div class="kr-okno">
-    <div class="kr-gora"><div class="kr-kropki">${KROKI_KREATORA.map((t, i) => `<span class="${i < k ? "zrobiony" : i === k ? "teraz" : ""}" title="${esc(t)}"></span>`).join("")}</div>
-      ${k < 4 ? `<button class="link" id="krPomin">Pomiń, ustawię później</button>` : ""}</div>
+    <div class="kr-gora"><div class="kr-kropki">${KROKI_KREATORA.map(([, t], i) => `<span class="${i < k ? "zrobiony" : i === k ? "teraz" : ""}" title="${esc(t)}"></span>`).join("")}</div>
+      ${idKroku() !== "gotowe" ? `<button class="link" id="krPomin">Pomiń, ustawię później</button>` : ""}</div>
     <div class="kr-tresc" id="krTresc"></div>
-    <div class="kr-dol">${k > 0 && k < 4 ? `<button class="btn jasny" id="krWstecz">← Wstecz</button>` : "<span></span>"}<span class="podpowiedz">Krok ${k + 1} z ${KROKI_KREATORA.length}</span>${k < 4 ? `<button class="btn duzy" id="krDalej">Dalej →</button>` : "<span></span>"}</div>
+    <div class="kr-dol">${(k > 0 || KR.pod > 0) && idKroku() !== "gotowe" ? `<button class="btn jasny" id="krWstecz">← Wstecz</button>` : "<span></span>"}<span class="podpowiedz">Krok ${k + 1} z ${KROKI_KREATORA.length}</span>${idKroku() !== "gotowe" ? `<button class="btn duzy" id="krDalej">${idKroku() === "gabinet" && KR.pod === 0 ? "Odpowiem na pytania →" : "Dalej →"}</button>` : "<span></span>"}</div>
   </div>`;
-  [krokProfil, krokPublikacja, krokWyglad, krokProgramy, krokGotowe][k]($("#krTresc"));
+  ({ profil: krokProfil, gabinet: krokGabinet, publikacja: krokPublikacja, wyglad: krokWyglad, programy: krokProgramy, gotowe: krokGotowe })[idKroku()]($("#krTresc"));
   const pomin = $("#krPomin");
   if (pomin) pomin.onclick = async () => { await api("/api/kreator/gotowe", { method: "POST", body: { zrobiony: true } }).catch(() => {}); zamknijKreator(); toast("Kreator wróci pod „⚙ Ustawienia gabinetu”", 3500); };
-  const w = $("#krWstecz"); if (w) w.onclick = () => { zbierz(); KR.krok--; rysujKreator(); };
+  const w = $("#krWstecz"); if (w) w.onclick = () => { zbierz(); if (idKroku() === "gabinet") zbierzGabinet(); if (idKroku() === "gabinet" && KR.pod > 0) KR.pod--; else { KR.krok--; KR.pod = idKroku() === "gabinet" ? PYTANIA_GAB.length + 1 : 0; } rysujKreator(); };
   const dalej = $("#krDalej"); if (dalej) dalej.onclick = async () => {
     zbierz();
-    if (k === 0 && !KR.dane.nazwa) return toast("Wpisz nazwę gabinetu");
-    if (k <= 1) { try { const g = await api("/api/profil", { method: "PUT", body: KR.dane }); if (S.start?.config) S.start.config.gabinet = g; } catch (e) { return blad(e); } }
-    KR.krok++; rysujKreator();
+    if (idKroku() === "profil" && !KR.dane.nazwa) return toast("Wpisz nazwę gabinetu");
+    if (idKroku() === "gabinet") { zbierzGabinet(); if (KR.pod <= PYTANIA_GAB.length) { KR.pod++; return rysujKreator(); } try { await api("/api/gabinet", { method: "PUT", body: KR.gab }); } catch (e) { return blad(e); } }
+    if (["profil", "publikacja"].includes(idKroku())) { try { const g = await api("/api/profil", { method: "PUT", body: KR.dane }); if (S.start?.config) S.start.config.gabinet = g; } catch (e) { return blad(e); } }
+    KR.krok++; KR.pod = 0; rysujKreator();
   };
   el.querySelector("input")?.focus();
 }
@@ -60,6 +65,87 @@ function krokProfil(el) {
     <div class="kafle">${(S.start?.kategorie || []).map((c) => `<button class="kafel ${KR.dane.uslugi.includes(c) ? "wybrany" : ""}" data-usluga="${c}"><span class="ikona">${IKONY[c] || "✨"}</span>${NAZWY_KAT[c] || c}</button>`).join("")}</div>`;
   el.querySelectorAll("[data-usluga]").forEach((b) => (b.onclick = () => b.classList.toggle("wybrany")));
 }
+// ---------- wywiad o gabinecie (scripts/gabinet.mjs): strona www + pytania po kolei + podsumowanie ----------
+const PYTANIA_GAB = [
+  { k: "opis", q: "Czym zajmuje się Twój gabinet?", hint: "1-3 zdania, tak jak powiedziałabyś nowej klientce.", ph: "np. Mały gabinet kosmetologii i podologii. Robię brwi, rzęsy, oczyszczania twarzy i pedicure podologiczny." },
+  { k: "specjalizacja", q: "Z czego chcesz być znana?", hint: "Twój „konik”: zabieg albo efekt, z którym klientki mają Cię kojarzyć.", chips: ["naturalne brwi", "zdrowe, zadbane stopy", "cera problematyczna", "efekt bez przesady", "rzęsy jak z bajki"] },
+  { k: "zabiegi", typ: "zabiegi", q: "Jakie zabiegi robisz i ile kosztują?", hint: "Wpisz te, które chcesz pokazywać w rolkach. Cena jest opcjonalna: bez ceny Claude jej nigdy nie poda. Odznacz „promuj”, jeśli zabieg robisz, ale nie chcesz go w rolkach." },
+  { k: "klientki", q: "Kim są Twoje klientki?", hint: "Kto przychodzi najczęściej i do kogo chcesz mówić.", chips: ["kobiety 25-45 z okolicy", "młode dziewczyny 18-25", "mamy z małymi dziećmi", "panny młode", "seniorzy (stopy)", "mężczyźni"] },
+  { k: "wyroznik", q: "Co Cię wyróżnia na tle innych gabinetów?", hint: "Dlaczego klientki wracają właśnie do Ciebie.", chips: ["doświadczenie", "nowoczesny sprzęt", "kameralna, spokojna atmosfera", "dokładność i higiena", "naturalny efekt", "przystępne ceny"] },
+  { k: "ton", q: "Jak mówisz do klientek?", hint: "Tak Claude napisze teksty i teleprompter.", chips: ["ciepło, na Ty, z humorem", "spokojnie i ekspercko", "krótko i konkretnie", "jak przyjaciółka"] },
+  { k: "unikaj", q: "Czego NIE chcesz w rolkach?", hint: "Claude nie zaproponuje tego w planie ani scenariuszach.", chips: ["podawania cen", "twarzy klientek", "tańczenia i trendów", "drastycznych zdjęć stóp", "mówienia do kamery", "porównywania z konkurencją"] },
+  { k: "promocje", q: "Masz promocje albo nowości w najbliższym czasie?", hint: "Opcjonalnie. Plan tygodnia je uwzględni.", chips: ["vouchery na prezent", "nowy zabieg", "pakiet zabiegów", "rabat na pierwszą wizytę"] },
+];
+const KAT_GAB = [["brwi", "Brwi"], ["rzesy", "Rzęsy"], ["twarz", "Twarz"], ["podologia", "Podologia"], ["pedicure", "Pedicure"], ["manicure", "Manicure"], ["gabinet", "Ogólne"], ["inne", "Inne"]];
+function zbierzGabinet() {
+  document.querySelectorAll("#krTresc [data-gab]").forEach((i) => (KR.gab[i.dataset.gab] = i.value.trim()));
+  const wiersze = document.querySelectorAll("#krTresc .gab-zabieg");
+  if (wiersze.length || document.querySelector("#krTresc #gabZabiegi")) {
+    KR.gab.zabiegi = [...wiersze].map((w) => ({ nazwa: w.querySelector("[data-z=nazwa]").value.trim(), cena: w.querySelector("[data-z=cena]").value.trim(), czas: w.querySelector("[data-z=czas]").value.trim(), kategoria: w.querySelector("[data-z=kategoria]").value, opis: w.dataset.opis || "", promuj: w.querySelector("[data-z=promuj]").checked })).filter((z) => z.nazwa);
+  }
+}
+function wierszZabiegu(z = {}) {
+  return `<div class="gab-zabieg" data-opis="${esc(z.opis || "")}"><input data-z="nazwa" value="${esc(z.nazwa || "")}" placeholder="np. Laminacja brwi"><input data-z="cena" value="${esc(z.cena || "")}" placeholder="cena, np. 150 zł"><input data-z="czas" value="${esc(z.czas || "")}" placeholder="czas"><select data-z="kategoria">${KAT_GAB.map(([k, n]) => `<option value="${k}" ${z.kategoria === k ? "selected" : ""}>${n}</option>`).join("")}</select><label title="Pokazuj w rolkach"><input type="checkbox" data-z="promuj" ${z.promuj !== false ? "checked" : ""}> promuj</label><button class="gab-usun" title="Usuń">✕</button></div>`;
+}
+function krokGabinet(el) {
+  const G = KR.gab, n = PYTANIA_GAB.length;
+  // 0: start (strona www albo pytania)
+  if (KR.pod === 0) {
+    el.innerHTML = `<h1>Opowiedz o swoim gabinecie</h1><p class="kr-lead">Claude układa plan rolek, pomysły i scenariusze pod Twój gabinet: Twoje zabiegi, ceny, klientki i styl. Masz stronę? Odczytam ją, a Ty tylko sprawdzisz odpowiedzi.</p>
+      <div class="karta kr-opcja"><b>🌐 Mam stronę internetową</b> <small class="podpowiedz">cennik, oferta, „o nas”: najlepiej strona główna</small>
+        <div class="rzad" style="margin-top:8px;flex-wrap:nowrap"><input id="gabUrl" value="${esc(G.strona || "")}" placeholder="np. twojgabinet.pl" style="flex:1"><button class="btn" id="gabCzytaj">✦ Odczytaj ze strony</button></div>
+        <div id="gabStan">${G.zrodlo === "strona" && G.zabiegi?.length ? `<p class="podpowiedz" style="margin-top:8px">✓ Odczytane wcześniej: ${G.zabiegi.length} zabiegów. Kliknij „Odpowiem na pytania”, żeby sprawdzić.</p>` : ""}</div></div>
+      <p class="podpowiedz">Nie masz strony albo wolisz sama? Kliknij „Odpowiem na pytania” (8 krótkich pytań, ok. 3 minuty). Wszystko zmienisz później w „⚙ Ustawienia gabinetu”.</p>`;
+    const czytaj = async () => {
+      const url = $("#gabUrl").value.trim(); if (!url) return toast("Wpisz adres strony");
+      $("#gabCzytaj").disabled = true;
+      $("#gabStan").innerHTML = `<p class="podpowiedz" style="margin-top:8px">⏳ Czytam stronę i podstrony (cennik, oferta, o nas), Claude wyciąga zabiegi i ceny. Ok. 20-60 s…</p>`;
+      try {
+        const W = await api("/api/gabinet/ze-strony", { method: "POST", body: { url } });
+        // strona uzupełnia puste odpowiedzi; zabiegi dopisuje bez duplikatów
+        for (const k of ["opis", "specjalizacja", "klientki", "wyroznik", "ton", "promocje", "styl_wizualny", "adres"]) if (!G[k] && W[k]) G[k] = W[k];
+        const nazwy = new Set((G.zabiegi || []).map((z) => z.nazwa.toLowerCase()));
+        G.zabiegi = [...(G.zabiegi || []), ...W.zabiegi.filter((z) => !nazwy.has(z.nazwa.toLowerCase())).map((z) => ({ ...z, promuj: true }))];
+        G.strona = W.strona; G.zrodlo = "strona";
+        const ceny = W.zabiegi.filter((z) => z.cena).length;
+        $("#gabStan").innerHTML = `<p style="margin-top:8px">✓ Odczytane z ${W.podstrony.length} ${W.podstrony.length === 1 ? "strony" : "stron"}: <b>${W.zabiegi.length} zabiegów</b>${ceny ? ` (${ceny} z ceną)` : ", bez cen"}, opis, klientki, wyróżnik i ton.${W.uwagi ? ` <small class="podpowiedz">${esc(W.uwagi)}</small>` : ""}</p><p class="podpowiedz">Kliknij „Odpowiem na pytania”: przejdziesz po odpowiedziach i poprawisz, co trzeba.</p>`;
+      } catch (e) { $("#gabStan").innerHTML = `<p style="color:var(--blad);margin-top:8px">✗ ${esc(e.message)}</p>`; }
+      $("#gabCzytaj").disabled = false;
+    };
+    $("#gabCzytaj").onclick = czytaj;
+    $("#gabUrl").onkeydown = (e) => { if (e.key === "Enter") czytaj(); };
+    return;
+  }
+  // n+1: podsumowanie
+  if (KR.pod > n) {
+    const pole = (k, nazwa) => (G[k] ? `<li><b>${nazwa}:</b> ${esc(G[k])}</li>` : "");
+    const prom = (G.zabiegi || []).filter((z) => z.promuj !== false);
+    el.innerHTML = `<h1>Tak Claude widzi Twój gabinet</h1><p class="kr-lead">Sprawdź. Coś nie tak? „← Wstecz” wraca do pytań.</p>
+      <ul class="gab-podsumowanie">${pole("opis", "Czym się zajmujesz")}${pole("specjalizacja", "Z czego chcesz być znana")}${pole("klientki", "Klientki")}${pole("wyroznik", "Co Cię wyróżnia")}${pole("ton", "Ton")}${pole("unikaj", "Czego nie chcesz")}${pole("promocje", "Promocje i nowości")}
+        <li><b>Zabiegi w rolkach (${prom.length}):</b> ${prom.slice(0, 14).map((z) => esc(z.nazwa) + (z.cena ? ` <small>(${esc(z.cena)})</small>` : "")).join(", ") || "brak"}${prom.length > 14 ? "…" : ""}</li></ul>
+      <p class="podpowiedz">Kliknij „Dalej”, żeby zapisać. Profil trafi do planu tygodnia, kalendarza, gotowych pomysłów, scenariuszy i Autopilota.</p>`;
+    return;
+  }
+  // 1..n: jedno pytanie
+  const P = PYTANIA_GAB[KR.pod - 1];
+  const kropki = PYTANIA_GAB.map((_, i) => `<i class="${i < KR.pod - 1 ? "zrobione" : i === KR.pod - 1 ? "teraz" : ""}"></i>`).join("");
+  if (P.typ === "zabiegi") {
+    el.innerHTML = `<div class="gab-postep">${kropki}<span>Pytanie ${KR.pod} z ${n}</span></div><h1>${P.q}</h1><p class="kr-lead">${P.hint}</p>
+      <div id="gabZabiegi" class="gab-zabiegi">${(G.zabiegi?.length ? G.zabiegi : [{}, {}, {}]).map(wierszZabiegu).join("")}</div>
+      <button class="btn jasny maly" id="gabDodaj">+ Dodaj zabieg</button>`;
+    const podepnij = () => document.querySelectorAll("#gabZabiegi .gab-usun").forEach((b) => (b.onclick = () => b.closest(".gab-zabieg").remove()));
+    $("#gabDodaj").onclick = () => { $("#gabZabiegi").insertAdjacentHTML("beforeend", wierszZabiegu()); podepnij(); $("#gabZabiegi .gab-zabieg:last-child input").focus(); };
+    podepnij();
+    return;
+  }
+  el.innerHTML = `<div class="gab-postep">${kropki}<span>Pytanie ${KR.pod} z ${n}</span></div><h1>${P.q}</h1><p class="kr-lead">${P.hint}</p>
+    <textarea data-gab="${P.k}" rows="3" placeholder="${esc(P.ph || "Napisz po swojemu albo kliknij podpowiedzi")}">${esc(G[P.k] || "")}</textarea>
+    ${P.chips ? `<div class="gab-chipy">${P.chips.map((c) => `<button class="chip-btn" data-chip="${esc(c)}">+ ${esc(c)}</button>`).join("")}</div>` : ""}`;
+  const ta = el.querySelector("textarea");
+  el.querySelectorAll("[data-chip]").forEach((b) => (b.onclick = () => { const v = ta.value.trim(); if (!v.toLowerCase().includes(b.dataset.chip.toLowerCase())) ta.value = v ? `${v.replace(/[.,;]$/, "")}, ${b.dataset.chip}` : b.dataset.chip; ta.focus(); }));
+  ta.focus();
+}
+
 function krokPublikacja(el) {
   el.innerHTML = `<h1>Gdzie publikujesz?</h1><p class="kr-lead">Konto pojawi się w znaku wodnym, na planszy „Obserwuj” i w opisach. Puste pola możesz zostawić.</p>
     <div class="kr-dwie">${poleKr("instagram", "Instagram", "@twoj_gabinet")}${poleKr("tiktok", "TikTok", "@twoj_gabinet")}</div>
@@ -84,7 +170,7 @@ function krokWyglad(el) {
         <div class="karta kr-opcja"><b>🎨 Ustawię kolory i fonty sama</b><div class="rzad" style="margin-top:8px"><button class="btn jasny" id="krEdytuj">Otwórz edytor wyglądu</button></div></div>
         <p class="podpowiedz">Nie masz pomysłu? Kliknij „Dalej”, zostanie obecny wygląd. Później możesz też mieć kilka stylistyk (np. na promocje).</p>
       </div></div>`;
-  const odswiezPodglad = async () => { await wczytajStyle(); ST.v = Date.now(); if (KR.krok === 2) krokWyglad($("#krTresc")); };
+  const odswiezPodglad = async () => { await wczytajStyle(); ST.v = Date.now(); if (idKroku() === "wyglad") krokWyglad($("#krTresc")); };
   $("#krEdytuj").onclick = () => edytorStylu(structuredClone(stylPoId("marka")), { po: odswiezPodglad });
   $("#krLogo").onchange = async (e) => {
     const f = e.target.files[0]; if (!f) return;
@@ -138,7 +224,7 @@ async function krokProgramy(el) {
   rysuj();
   if (!KR.programy) {
     try { KR.programy = await api("/api/programy"); } catch (e) { el.innerHTML = `<p style="color:var(--blad)">✗ ${esc(e.message)}</p>`; return; }
-    if (KR.otwarty && KR.krok === 3) rysuj();
+    if (KR.otwarty && idKroku() === "programy") rysuj();
   }
 }
 async function krokGotowe(el) {

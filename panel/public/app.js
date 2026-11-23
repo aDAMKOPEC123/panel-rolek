@@ -1797,6 +1797,8 @@ function promptAutopilota(P) {
 
 Jesteś AUTOPILOTEM montażu. ${OS().mian} tylko wrzuciła nagrania do rolki ${n} (folder ${P.sciezka}, pliki w raw/). Ty robisz całą resztę: rozpoznajesz nagrania, robisz krótki wywiad (co chce, a czego nie), montujesz ze wszystkimi pasującymi funkcjami, renderujesz, sprawdzasz i poprawiasz. Ona tylko odpowiada na pytania przyciskami.
 
+PROFIL GABINETU: 02_BRAND/gabinet.md (jeśli istnieje): zabiegi i ceny, klientki, wyróżnik, ton, czego NIE pokazywać. Trzymaj się go w pomysłach, hookach i CTA; nie wymyślaj zabiegów ani cen spoza niego.
+
 PAMIĘĆ: 02_BRAND/autopilot.json (chce, nie_chce, ustawienia, historia). Przeczytaj ją na starcie. Nie pytaj o to, co już tam jest, tylko potwierdź w pół zdania (np. „jak ostatnio: bez emoji, napisy Perła”). Po wywiadzie dopisz nowe decyzje: chce / nie_chce jako krótkie hasła funkcji, ustawienia (styl_napisow, ruch, dlugosc, cta, muzyka). Na końcu dodaj wpis do historia: {data, projekt, decyzje}.
 
 PLAN TYGODNIA: jeśli brief.md ma w sekcji „Notatki” rolkę z planu tygodnia (hook, ujęcia, CTA, wygląd), to jest pomysł tej rolki: zaproponuj go jako pierwszy kąt w pytaniu a), a hook z planu jako pierwszą propozycję w b). Wygląd „naturalny” = rolka.json -> "montaz": "naturalny".
@@ -2000,7 +2002,7 @@ const ETAPY_PM = [["profil", "Profil rolki"], ["scenariusz", "Scenariusz"], ["go
 
 function promptPomyslu(tryb, tekst) {
   const kat = S.start.kategorie.join(", ");
-  return `Użyj skilla rolki-beauty (.claude/skills/rolki-beauty/SKILL.md) i zasad z CLAUDE.md. Przeczytaj też: .claude/skills/rolki-beauty/references/formaty-rolek.md, .claude/skills/rolki-beauty/references/hooki-beauty.md, 03_BIBLIOTEKA/research/hooki.md (hooki, które zatrzymały ${OS().bier} w cudzych rolkach: bierz ich mechanizm, nigdy słowa) oraz 02_BRAND/brand.md (jeśli istnieje).
+  return `Użyj skilla rolki-beauty (.claude/skills/rolki-beauty/SKILL.md) i zasad z CLAUDE.md. Przeczytaj też: .claude/skills/rolki-beauty/references/formaty-rolek.md, .claude/skills/rolki-beauty/references/hooki-beauty.md, 03_BIBLIOTEKA/research/hooki.md (hooki, które zatrzymały ${OS().bier} w cudzych rolkach: bierz ich mechanizm, nigdy słowa) oraz 02_BRAND/brand.md i 02_BRAND/gabinet.md (profil gabinetu: czym się zajmuje, zabiegi i ceny, klientki, wyróżnik, ton, czego NIE pokazywać; nie wymyślaj zabiegów ani cen spoza tego profilu, a gdy go brak, nie podawaj cen).
 
 Jesteś scenarzystką rolek IG/TikTok dla gabinetu beauty ${OS().dop} (kosmetologia: brwi, rzęsy, twarz; podologia: pedicure, stopy, paznokcie). Pracujecie RAZEM w panelu: ${OS().mian} widzi po prawej „profil rolki”, który budujesz w pliku, a po lewej rozmowę z Tobą.
 

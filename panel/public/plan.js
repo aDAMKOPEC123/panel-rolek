@@ -21,13 +21,15 @@ async function kartaPlanu(od) {
   try { await wczytajTydzien(od); } catch { if (box) box.innerHTML = ""; return; }
   if (!box) return;
   const { plan, dzis } = PL.dane;
+  // Claude nie zna gabinetu: wywiad z kreatora (krok „gabinet”, scripts/gabinet.mjs)
+  const bezProfilu = PL.dane.gabinet === false ? `<button class="pl-dzis pl-gabinet" id="plGabinet">🏥 <b>Claude nie zna jeszcze Twojego gabinetu.</b> <span>Opowiedz o zabiegach, cenach i klientkach albo podaj stronę www (3 min), a plan i pomysły trafią w Twoją ofertę →</span></button>` : "";
   const tenTydzien = PL.od <= dzis && dzis <= dodajDni(PL.od, 6);
   const nawigacja = `<div class="pl-nawigacja"><button class="btn maly jasny" data-tydzien="-7" title="Poprzedni tydzień">←</button><b>${dataPl(PL.od)} – ${dataPl(dodajDni(PL.od, 6))}</b>${tenTydzien ? '<span class="chip">ten tydzień</span>' : ""}<button class="btn maly jasny" data-tydzien="7" title="Następny tydzień">→</button><button class="btn maly jasny" id="plKalendarz" title="Cały miesiąc, przeciąganie rolek, eksport do telefonu">🗓️ Kalendarz miesiąca</button></div>`;
   if (!plan || !plan.dni.length) {
     const ok = (PL.dane.okazje || []).slice(0, 3);
     box.innerHTML = `<div class="karta pl-karta"><div class="naglowek"><div><h3>🗓️ Plan rolek na tydzień</h3>${nawigacja}
       <p class="podpowiedz">Claude ułoży 2-5 rolek na wybrane dni: pod porę roku${ok.length ? ` i okazje (${ok.map((o) => esc(o.okazja.split(" (")[0])).join(", ")})` : ""}, Twoje usługi, grafik zabiegów i pytania klientek. Przy każdej: gotowy scenariusz, co nagrać i kiedy.</p></div>
-      <button class="btn" id="plUloz">✦ Ułóż plan${tenTydzien ? " na ten tydzień" : ""}</button></div></div>`;
+      <button class="btn" id="plUloz">✦ Ułóż plan${tenTydzien ? " na ten tydzień" : ""}</button></div>${bezProfilu}</div>`;
     podepnijPlan(box);
     return;
   }
@@ -40,6 +42,7 @@ async function kartaPlanu(od) {
   box.innerHTML = `<div class="karta pl-karta">
     <div class="naglowek"><div><h3>🗓️ Plan na tydzień <small class="podpowiedz">${esc(plan.motyw || "")}</small></h3>${nawigacja}<p class="podpowiedz pl-postep">${postep}</p></div>
       <div class="rzad" style="gap:6px">${plan.dni.some((d) => !d.pomysl && !d.projekt && d.stan !== "pominieta") ? `<button class="btn maly" id="plScenariusze" data-zadanie title="Pełne scenariusze z oceną dla rolek bez scenariusza">✍️ Napisz scenariusze</button>` : ""}<button class="btn maly jasny" id="plUloz">↻ Ułóż od nowa</button></div></div>
+    ${bezProfilu}
     ${doNagrania.map((d) => `<button class="pl-dzis" data-wpis="${d.id}">📅 <b>Dziś nagrywasz:</b> ${esc(d.tytul)} <span>(publikacja ${DNI_KROTKO[(new Date(d.data + "T12:00").getDay() + 6) % 7]} ${dataPl(d.data)}) · co nagrać →</span></button>`).join("")}
     ${doPublikacji.map((d) => `<button class="pl-dzis publikacja" data-wpis="${d.id}">📤 <b>Dziś publikujesz:</b> ${esc(d.tytul)} <span>o ${esc(d.godzina || "18:00")}${d.stan === "gotowa" ? " · film gotowy" : " · " + STANY_PLANU[d.stan || "plan"][1]} →</span></button>`).join("")}
     <div class="pl-tydzien">${DNI_KROTKO.map((n, i) => {
@@ -63,6 +66,7 @@ function podepnijPlan(box) {
   box.querySelectorAll("[data-tydzien]").forEach((b) => (b.onclick = () => kartaPlanu(dodajDni(PL.od, Number(b.dataset.tydzien)))));
   box.querySelectorAll("[data-wpis]").forEach((b) => (b.onclick = () => szczegolyRolki(b.dataset.wpis, PL.od)));
   const u = $("#plUloz", box); if (u) u.onclick = oknoUkladania;
+  const g = $("#plGabinet", box); if (g) g.onclick = () => otworzKreator(KROKI_KREATORA.findIndex(([id]) => id === "gabinet"));
   const k = $("#plKalendarz", box); if (k) k.onclick = () => otworzKalendarz(PL.od.slice(0, 7));
   const sc = $("#plScenariusze", box);
   if (sc) sc.onclick = () => uruchom("plan-tygodnia", ["--od", PL.od, "--tylko-scenariusze"], { opis: "Scenariusze dla planu tygodnia", po: ({ kod }) => { if (!kod) toast("Scenariusze gotowe ✓", 2500); poZmianiePlanu(); } });

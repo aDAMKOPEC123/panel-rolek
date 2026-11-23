@@ -824,3 +824,16 @@ body.bez-licencji header, body.bez-licencji #ekran { display: none !important; }
 #licKod { width: 100%; text-align: center; font-size: 22px; letter-spacing: 0.08em; font-weight: 700; padding: 14px; margin: 10px 0 12px; font-family: ui-monospace, Consolas, monospace; }
 .lic-okno .btn { width: 100%; }
 .lic-blad { color: var(--blad); min-height: 1.4em; margin: 10px 0 4px; font-size: 14px; }
+/* wywiad o gabinecie (kreator.js, krok „gabinet”) */
+.gab-postep { display: flex; align-items: center; gap: 5px; margin-bottom: 10px; } .gab-postep i { width: 22px; height: 5px; border-radius: 3px; background: var(--linia); }
+.gab-postep i.zrobione { background: var(--ok); } .gab-postep i.teraz { background: var(--akcent); } .gab-postep span { margin-left: 8px; font-size: 12.5px; color: var(--szary); }
+.kr-tresc textarea[data-gab] { width: 100%; font-size: 16px; }
+.gab-chipy { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.gab-zabiegi { display: grid; gap: 6px; margin-bottom: 10px; max-height: 46vh; overflow: auto; }
+.gab-zabieg { display: grid; grid-template-columns: 2fr 1fr 0.8fr 1fr auto auto; gap: 6px; align-items: center; }
+.gab-zabieg input, .gab-zabieg select { padding: 8px 10px; font-size: 14px; }
+.gab-zabieg label { font-size: 12px; color: var(--szary); white-space: nowrap; display: flex; gap: 4px; align-items: center; }
+.gab-usun { border: 0; background: var(--tlo); border-radius: 50%; width: 28px; height: 28px; cursor: pointer; color: var(--szary); }
+.gab-podsumowanie { padding-left: 18px; font-size: 14.5px; } .gab-podsumowanie li { margin-bottom: 8px; }
+@media (max-width: 720px) { .gab-zabieg { grid-template-columns: 1fr 1fr; } }
+.pl-dzis.pl-gabinet { background: color-mix(in srgb, var(--uwaga) 14%, var(--bialy)); box-shadow: 0 0 0 2px var(--uwaga); }

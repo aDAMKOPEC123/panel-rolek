@@ -14,6 +14,7 @@ import {
 import { policz as policzAlgorytm, skladnikiRolki, przepisDlaClaude } from "../scripts/algorytm.mjs";
 import { czytajBank, zapiszBank } from "../scripts/bank-hookow.mjs";
 import { wlaczTelefon, wylaczTelefon, stanTelefonu } from "./telefon.mjs";
+import { czytajProfil as czytajProfilGab, maProfil as maProfilGab, zapiszProfil as zapiszProfilGab, profilZeStrony } from "../scripts/gabinet.mjs";
 import { stanLicencji, maLicencje, aktywuj as aktywujLicencje, dezaktywuj as dezaktywujLicencje } from "../scripts/licencja.mjs";
 import { zapiszProfil, oznaczKreator, stanKreatora, sprawdzProgramy } from "./kreator.mjs";
 import { PLAN_DIR, plikPlanu, poniedzialek, okazje as okazjePlanu } from "../scripts/plan-tygodnia.mjs";
@@ -455,6 +456,10 @@ trasa("GET", /^\/api\/start$/, () => {
   const cfg = wczytajConfig();
   return { licencja, config: { kolory: cfg.kolory, fonty: cfg.fonty, gabinet: cfg.gabinet, napisy: cfg.napisy, cta: cfg.cta, rolka: cfg.rolka, ruch: cfg.ruch }, kategorie: KATEGORIE, claude: !!claudeDostepny(), kreator: stanKreatora() };
 });
+// Profil gabinetu (scripts/gabinet.mjs): wywiad w kreatorze i odczyt strony www przez Claude
+trasa("GET", /^\/api\/gabinet$/, () => ({ profil: czytajProfilGab(), jest: maProfilGab() }));
+trasa("PUT", /^\/api\/gabinet$/, async (m, req) => zapiszProfilGab(await body(req)));
+trasa("POST", /^\/api\/gabinet\/ze-strony$/, async (m, req) => { try { return await profilZeStrony((await body(req)).url); } catch (e) { throw blad400(e.message); } });
 // Licencja (scripts/licencja.mjs): bez aktywnego kodu działają tylko te trasy i /api/start
 trasa("GET", /^\/api\/licencja$/, () => stanLicencji());
 trasa("POST", /^\/api\/licencja$/, async (m, req) => { try { return aktywujLicencje((await body(req)).kod); } catch (e) { throw blad400(e.message); } });
@@ -689,7 +694,7 @@ trasa("GET", /^\/api\/plan$/, (m, req, url) => {
     }
   }
   const tygodnie = fs.existsSync(PLAN_DIR) ? fs.readdirSync(PLAN_DIR).filter((n) => /^\d{4}-\d{2}-\d{2}\.json$/.test(n)).map((n) => n.slice(0, 10)).sort() : [];
-  return { od, dzis: isoDnia(new Date()), plan, tygodnie, okazje: plan ? null : okazjePlanu(new Date(od + "T12:00"), 13) };
+  return { od, dzis: isoDnia(new Date()), plan, tygodnie, okazje: plan ? null : okazjePlanu(new Date(od + "T12:00"), 13), gabinet: maProfilGab() };
 });
 trasa("PUT", /^\/api\/plan\/(\d{4}-\d{2}-\d{2})\/dzien\/(\d{4}-\d{2}-\d{2})$/, async (m, req) => {
   const plan = czytajJson(plikPlanu(m[1]), null);
