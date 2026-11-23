@@ -69,7 +69,8 @@ export async function sprawdzProgramy(claudeBin) {
   ]);
   const node = Number(process.versions.node.split(".")[0]);
   const pyV = (python.out.match(/(\d+)\.(\d+)/) || []).slice(1).map(Number);
-  const pip = (pakiet) => `${py} -m pip install ${pakiet}`;
+  // Python z Homebrew blokuje instalację do systemu (PEP 668): na Macu do katalogu użytkownika
+  const pip = (pakiet) => `${py} -m pip install ${process.platform === "darwin" ? "--user --break-system-packages " : ""}${pakiet}`;
   const L = [
     { id: "node", nazwa: "Node.js", po_co: "panel i skrypty", ok: node >= 22, wersja: process.version, wymagany: true, jak: inst("winget install OpenJS.NodeJS.LTS", "brew install node", "nvm install 22") },
     { id: "ffmpeg", nazwa: "FFmpeg", po_co: "obróbka nagrań, dźwięk, okładka", ok: ffmpeg.kod === 0 && ffprobe.kod === 0, wersja: pierwsza(ffmpeg.out).replace(/ Copyright.*/, ""), wymagany: true, jak: inst("winget install Gyan.FFmpeg", "brew install ffmpeg", "sudo apt install ffmpeg") },

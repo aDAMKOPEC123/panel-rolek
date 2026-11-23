@@ -18,10 +18,14 @@ if (zmiany) uwaga(`Masz niezapisane zmiany w ${zmiany.split("\n").length} plikac
 // pliki dokładane do paczki (poza repozytorium)
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "paczka-"));
 const instr = path.join(tmp, "JAK_ZAINSTALOWAC.txt");
-fs.writeFileSync(instr, "﻿" + `PANEL ROLEK: instalacja (Windows)
-==================================
+fs.writeFileSync(instr, "﻿" + `PANEL ROLEK: instalacja
+=======================
 
 Do uruchomienia potrzebujesz KODU LICENCYJNEGO (ROLKI-XXXX-XXXX-XXXX), który dostałaś razem z tą paczką.
+Masz Maca? Przewiń niżej do części „MAC”.
+
+WINDOWS
+-------
 
 1. Rozpakuj ten plik ZIP, np. na Pulpit (kliknij prawym > Wyodrębnij wszystkie).
 
@@ -47,6 +51,40 @@ Dodatki (opcjonalnie, do wybranych efektów): w PowerShell
      python -m pip install --no-deps mediapipe absl-py
      python -m pip install onnxruntime ultralytics faster-whisper
      npx hyperframes skills update
+
+MAC
+---
+
+1. Rozpakuj ten plik ZIP (dwuklik w Finderze), najlepiej w folderze Dokumenty albo na Biurku.
+
+2. Zainstaluj programy. Otwórz Terminal (Cmd + spacja, wpisz "Terminal", Enter).
+   Najpierw Homebrew (instalator programów), wklej i naciśnij Enter, potem podaj hasło do Maca:
+     /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+   Na końcu Homebrew wypisze 2-3 polecenia „Next steps” (echo ... >> ~/.zprofile): wklej je też.
+   Zamknij Terminal, otwórz go jeszcze raz i wklej po kolei:
+     brew install node ffmpeg python
+     npm install -g @anthropic-ai/claude-code
+     python3 -m pip install --user --break-system-packages opencv-python numpy
+   Na koniec wpisz:  claude
+   i zaloguj się na swoje konto Claude.
+
+3. W rozpakowanym folderze kliknij PRAWYM przyciskiem: Uruchom panel.command > Otwórz > Otwórz.
+   (Pierwszy raz macOS pyta, czy na pewno, bo plik jest z internetu. Później wystarczy dwuklik.)
+   Gdyby macOS i tak nie pozwolił: Ustawienia systemowe > Prywatność i ochrona > na dole „Otwórz mimo to”.
+   Otworzy się przeglądarka z panelem. Nie zamykaj okna Terminala, dopóki pracujesz.
+
+4. Wpisz kod licencyjny i kliknij „Aktywuj”. Potem kreator, jak wyżej w części Windows (punkt 5).
+
+Dodatki (opcjonalnie): w Terminalu
+     python3 -m pip install --user --break-system-packages --no-deps mediapipe absl-py
+     python3 -m pip install --user --break-system-packages onnxruntime ultralytics faster-whisper
+     npx hyperframes skills update
+   Upscaling AI (Final w 4K, „Ulepsz jakość”) i płynne slow motion RIFE potrzebują programów
+   w wersji dla Maca w folderze narzedzia/. Bez nich slow motion działa prostszą metodą,
+   a „Ulepsz jakość” ma tryb szybki bez AI.
+
+WSZYSTKIE KOMPUTERY
+-------------------
 
 Nowa wersja aplikacji: rozpakuj nową paczkę W MIEJSCE starej (zastąp pliki).
 Twoje nagrania, rolki, ustawienia i aktywacja zostają, bo nie ma ich w paczce.

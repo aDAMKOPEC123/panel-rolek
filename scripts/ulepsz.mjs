@@ -64,7 +64,7 @@ const klasyczne = (W, H) => `scale=${W}:${H}:flags=lanczos+accurate_rnd+full_chr
 // ---------- Real-ESRGAN ----------
 function wymagajAI() {
   if (!fs.existsSync(ESR)) blad("Brak programu Real-ESRGAN w narzedzia/realesrgan/.",
-    "Pobierz realesrgan-ncnn-vulkan-20220424-windows.zip z github.com/xinntao/Real-ESRGAN/releases (v0.2.5.0) i rozpakuj do narzedzia/realesrgan/. Albo użyj --szybki.");
+    `Pobierz realesrgan-ncnn-vulkan-20220424-${process.platform === "win32" ? "windows" : process.platform === "darwin" ? "macos" : "ubuntu"}.zip z github.com/xinntao/Real-ESRGAN/releases (v0.2.5.0) i rozpakuj do narzedzia/realesrgan/. Albo użyj --szybki.`);
 }
 let gpuCache;
 function gpu() {

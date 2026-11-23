@@ -25,6 +25,22 @@ Aplikacja do robienia rolek na Instagram i TikTok dla gabinetu beauty: od nagra�
 5. **Wpisz kod licencyjny** (`ROLKI-XXXX-XXXX-XXXX`). Wystarczy raz na komputerze.
 6. Przejdź kreator: imię, gabinet, konta, wygląd marki (także ze strony www). Na końcu kreator sprawdzi programy i pokaże komendy do brakujących.
 
+## Instalacja (Mac)
+
+1. Zainstaluj [Homebrew](https://brew.sh) (i wykonaj polecenia „Next steps”, które wypisze), potem w Terminalu:
+   ```bash
+   brew install node ffmpeg python
+   npm install -g @anthropic-ai/claude-code
+   python3 -m pip install --user --break-system-packages opencv-python numpy
+   python3 -m pip install --user --break-system-packages --no-deps mediapipe absl-py
+   python3 -m pip install --user --break-system-packages onnxruntime ultralytics faster-whisper
+   ```
+   Zaloguj Claude Code: `claude`. (`--break-system-packages` jest potrzebne, bo Python z Homebrew nie pozwala instalować bibliotek bez tego; `--user` kładzie je w katalogu użytkownika.)
+2. Rozpakuj paczkę i uruchom **`Uruchom panel.command`**: za pierwszym razem prawy przycisk > Otwórz (plik z internetu), później dwuklik.
+3. Kod licencyjny i kreator jak na Windows (punkty 5-6).
+
+Na Macu upscaling AI (Real-ESRGAN) i slow motion RIFE potrzebują wersji tych programów dla macOS w `narzedzia/`; bez nich slow motion używa FFmpeg (minterpolate), a ulepszanie trybu szybkiego.
+
 Skille HyperFrames dla Claude (montaż): `npx hyperframes skills update`.
 Modele AI do efektów dodatkowych (mapa twarzy, zdjęcie 3D, wycinanie obiektów, upscaling) trafiają do folderu `narzedzia/`; opis w `CLAUDE.md` (sekcja „Jak to działa”).
 

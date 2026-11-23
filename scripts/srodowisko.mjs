@@ -12,7 +12,7 @@ const testy = [
   ["ffmpeg", ["-version"], () => true, "FFmpeg", inst("winget install Gyan.FFmpeg", "brew install ffmpeg", "sudo apt install ffmpeg")],
   ["ffprobe", ["-version"], () => true, "FFprobe", "instaluje się z FFmpeg"],
   ["git", ["--version"], () => true, "git", inst("winget install Git.Git", "xcode-select --install", "sudo apt install git")],
-  ["python", ["--version"], (o) => { const [a, b] = o.replace(/[^\d.]/g, "").split(".").map(Number); return a > 3 || (a === 3 && b >= 8); }, "Python >= 3.8", inst("winget install Python.Python.3.12", "brew install python", "sudo apt install python3")],
+  [IS_WIN ? "python" : "python3", ["--version"], (o) => { const [a, b] = o.replace(/[^\d.]/g, "").split(".").map(Number); return a > 3 || (a === 3 && b >= 8); }, "Python >= 3.8", inst("winget install Python.Python.3.12", "brew install python", "sudo apt install python3")],
   ["auto-editor", ["--version"], () => true, "auto-editor (wycinanie ciszy)", "pip install auto-editor"],
 ];
 info(pogrubiony("Narzędzia:"));
@@ -22,7 +22,7 @@ for (const [cmd, a, okFn, opis, jak] of testy) {
   if (r.code === 0 && okFn(out)) ok(`${opis.padEnd(34)} ${out.slice(0, 50)}`);
   else uwaga(`${opis.padEnd(34)} BRAK albo za stara wersja -> ${jak}`);
 }
-const fw = uruchom("python", ["-c", "import faster_whisper; print(faster_whisper.__version__)"], { cicho: true });
+const fw = uruchom(IS_WIN ? "python" : "python3", ["-c", "import faster_whisper; print(faster_whisper.__version__)"], { cicho: true });
 if (fw.code === 0) ok(`${"faster-whisper (fallback transkrypcji)".padEnd(34)} ${fw.stdout.trim()}`);
 else uwaga(`${"faster-whisper (fallback, opcjonalnie)".padEnd(34)} pip install faster-whisper`);
 const esr = path.join(ROOT, "narzedzia", "realesrgan", IS_WIN ? "realesrgan-ncnn-vulkan.exe" : "realesrgan-ncnn-vulkan");

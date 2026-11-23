@@ -47,7 +47,7 @@ if (r.code === 0 && zrodloJson) {
   info("Próbuję fallback: faster-whisper ...");
   const py = path.join(ROOT, "scripts", "faster_whisper_pl.py");
   const json = path.join(tmp, "fw.json");
-  const r2 = uruchom("python", ["-I", py, plik, json, model === "large" ? "large-v3" : model, jezyk], { cicho: true, timeout: 60 * 60 * 1000 });
+  const r2 = uruchom(process.platform === "win32" ? "python" : "python3", ["-I", py, plik, json, model === "large" ? "large-v3" : model, jezyk], { cicho: true, timeout: 60 * 60 * 1000 });
   if (r2.code !== 0 || !fs.existsSync(json)) {
     blad("Transkrypcja nie wyszła ani w HyperFrames, ani w faster-whisper.\n" + (r2.stderr || "").slice(-600),
       "Zainstaluj fallback: pip install faster-whisper   albo whisper.cpp (npx hyperframes doctor pokaże komendę).");
