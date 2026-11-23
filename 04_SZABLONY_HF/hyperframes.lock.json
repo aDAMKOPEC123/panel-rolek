@@ -1,0 +1,22 @@
+{
+  "assets/avatar.jpg": "a300f59c31d2ea16195a2ff9a9af50b29c6aecc05d505d69f2a2132a53b99032",
+  "compositions/components/before-after-wipe.html": "c04e8bf1bfbcec71d0921a03a786cc09e660732428aa04bf79036a30b7755e09",
+  "compositions/components/caption-clip-wipe.html": "5675efd493c78d3a50a744ae4eb4b2b60fff97c231a5b756f8991581fbe569c8",
+  "compositions/components/caption-editorial-emphasis.html": "6144571b6c73dbdec282284fe2277d3c958e15cddaf362295ba9cca02e705d1c",
+  "compositions/components/caption-highlight.html": "769a0c2012088525b75401079bfae45e774fa39decdc37194d7f7e607c5c908e",
+  "compositions/components/caption-pill-karaoke.html": "cdbbc72af7fbac440c0bf5750cf9e3d4ded20f26588b00ac79399342ca60b3e3",
+  "compositions/components/caption-weight-shift.html": "8a5294debec3eadeb7ca0a8688c31a6e8c517ebb1c55ff410aa81df3807daa55",
+  "compositions/components/soft-blur-in.html": "9b732bb33aead010102a79d2f63039aaa20108619e567a0d14435c0489fcb9b2",
+  "compositions/cross-warp-morph.html": "c0c489e69e0a8513a7ec0482efc6ce0a2e9449d06ea7581a57931d8e030edd10",
+  "compositions/domain-warp-dissolve.html": "ff1c2e431b5a5b3c2544219679edbd274ff914e1a14a8250f7c3339b2096301f",
+  "compositions/editorial-flash-overlay.html": "4d8a3edc42b63aa99de52e5e1bbc932a7f6ba1e83d52e003aba27cd5a20fc432",
+  "compositions/flash-through-white.html": "0b5f25cd3eca2de71269475e1178a8a0667afa5f7bc08bb9cf80b49dd6f97596",
+  "compositions/instagram-follow.html": "88af01bf9f4d90c956254c7b0373757194c2b508fcabafee8492e71b8ec2f68c",
+  "compositions/light-leak.html": "6f3961d0b875f5c5e0ff5a423dab636613fad0d486e23c5da315ef5d1183359a",
+  "compositions/lt-clean-bar.html": "b3264493a651f6db103310f71c09276a093a527d5e9a3139ea22c6313952c268",
+  "compositions/lt-soft-pill.html": "6d03315f5e55746e1269f429ff3fcd9f3f95a55719d241cd384ceecaeee3e86c",
+  "compositions/organic-light-leak-overlay.html": "a7cf27b41d5fc99dea3748e94fe93ab04b94ad744aa5eefe030e756b54e495f0",
+  "compositions/tiktok-follow.html": "0c3fec5c55afcf64f4fab9c98194db1f18b22bab43ec99d0ee1797b4804e3e1a",
+  "compositions/transitions-blur.html": "74648d6d8066273a707d7c6fb7474ef11568c8e773e50ed5b5b74c52257ac23d",
+  "compositions/transitions-dissolve.html": "9a862ff4ffd2cf583a2877a1429965ace11096e9609ca851069a08bb44c0c954"
+}

@@ -1,0 +1,83 @@
+# --- Panel rolek: do repozytorium idzie tylko aplikacja. Nagrania, dane gabinetu, tokeny i aktywacja zostają lokalnie. ---
+
+# Licencja: aktywacja na tym komputerze (kod) i narzędzie autora do generowania kodów
+.licencja.json
+narzedzia/
+
+# Twoje ustawienia i marka (nowa instalacja dostaje neutralne pliki z szablon_startowy/)
+/config.json
+02_BRAND/*
+!02_BRAND/README.md
+!02_BRAND/brand.md
+!02_BRAND/logo/
+02_BRAND/logo/*
+!02_BRAND/logo/README.md
+!02_BRAND/watermark/
+02_BRAND/watermark/*
+!02_BRAND/watermark/README.md
+!02_BRAND/fonty/
+02_BRAND/fonty/*
+!02_BRAND/fonty/README.md
+
+# Nagrania, rolki i wyniki (twarze klientek, RODO)
+00_INBOX/*
+!00_INBOX/README.md
+01_PROJEKTY/*
+!01_PROJEKTY/README.md
+!01_PROJEKTY/_SZABLON_ROLKI/
+05_ARCHIWUM/*
+!05_ARCHIWUM/README.md
+
+# Biblioteka: muzyka z licencją (nie wolno jej rozpowszechniać), wygenerowane dźwięki, Twój research
+03_BIBLIOTEKA/muzyka/*
+!03_BIBLIOTEKA/muzyka/README.md
+03_BIBLIOTEKA/sfx/*
+!03_BIBLIOTEKA/sfx/README.md
+03_BIBLIOTEKA/broll/**/*
+!03_BIBLIOTEKA/broll/**/
+!03_BIBLIOTEKA/broll/**/README.md
+03_BIBLIOTEKA/tla/*
+!03_BIBLIOTEKA/tla/README.md
+03_BIBLIOTEKA/research/hooki.json
+03_BIBLIOTEKA/research/hooki.md
+03_BIBLIOTEKA/research/pytania.json
+
+# Pliki generowane i podglądy
+node_modules/
+panel/.cache/
+04_SZABLONY_HF/renders/
+04_SZABLONY_HF/_podglad/kompozycja/index.html
+04_SZABLONY_HF/_podglad/kompozycja/compositions/
+04_SZABLONY_HF/_podglad/kompozycja/assets/
+04_SZABLONY_HF/_podglad/kompozycja/.zloz.json
+04_SZABLONY_HF/_podglad/kompozycja/.ruch.json
+04_SZABLONY_HF/_podglad/kompozycja/twarz/
+04_SZABLONY_HF/_podglad/render/
+04_SZABLONY_HF/okladka/*.png
+*.czesc.*
+*.czesc
+
+# Inne foldery robocze z tego komputera
+/.tmp_klatki/
+/drzwi_chlodnicze/
+/filmy/
+/gotowy film/
+/wstawki/
+/zdjecia/
+/.agents/
+
+# Skille: w repo tylko własny skill rolki-beauty (reszta: npx hyperframes skills update, wg skills-lock.json)
+.claude/*
+!.claude/skills/
+.claude/skills/*
+!.claude/skills/rolki-beauty/
+
+# System
+Thumbs.db
+desktop.ini
+.DS_Store
+*.log
+
+# Stan i historia HyperFrames (ścieżki z nazwą użytkownika), cache przed/po z podglądu
+**/.hyperframes/
+04_SZABLONY_HF/_podglad/kompozycja/przed-po/

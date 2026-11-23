@@ -1,0 +1,128 @@
+<!-- hyperframes-registry-item: przejscie-swiatlo -->
+<!-- przejscie-swiatlo: z katalogu HyperFrames (organic-light-leak-overlay), przerobione na pion. Ciepły light leak, szczyt ok. 30% długości: zloz ustawia start = cięcie - 0.3 * czas. -->
+<!doctype html>
+<html lang="pl">
+  <head>
+    <meta charset="UTF-8" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        width: 1080px;
+        height: 1920px;
+        margin: 0;
+        overflow: hidden;
+        background: transparent;
+      }
+
+      #przejscie-swiatlo-box {
+        position: absolute;
+        inset: -16%;
+        opacity: 0;
+        overflow: hidden;
+        pointer-events: none;
+        mix-blend-mode: screen;
+      }
+
+      #przejscie-swiatlo-box .hf-leak-layer {
+        position: absolute;
+        inset: -20%;
+        will-change: opacity, transform;
+      }
+
+      #przejscie-swiatlo-box .hf-leak-amber {
+        background:
+          radial-gradient(ellipse 52% 110% at 10% 58%, rgb(255 241 197 / 92%), transparent 45%),
+          radial-gradient(ellipse 72% 120% at 24% 54%, rgb(255 126 57 / 78%), transparent 66%);
+        filter: blur(2.8vmin);
+      }
+
+      #przejscie-swiatlo-box .hf-leak-red {
+        background: radial-gradient(
+          ellipse 58% 105% at 78% 34%,
+          rgb(255 79 61 / 72%),
+          rgb(255 44 92 / 28%) 48%,
+          transparent 76%
+        );
+        filter: blur(4vmin);
+      }
+
+      #przejscie-swiatlo-box .hf-leak-gold {
+        background: linear-gradient(
+          104deg,
+          transparent 24%,
+          rgb(255 144 62 / 30%) 40%,
+          rgb(255 247 205 / 72%) 51%,
+          rgb(255 124 48 / 22%) 62%,
+          transparent 78%
+        );
+        filter: blur(2vmin);
+      }
+    </style>
+  </head>
+  <body>
+    <div
+      id="przejscie-swiatlo"
+      data-composition-id="przejscie-swiatlo"
+      data-start="0"
+      data-duration="1.6"
+      data-width="1080"
+      data-height="1920"
+    >
+      <div id="przejscie-swiatlo-box" aria-hidden="true">
+        <div class="hf-leak-layer hf-leak-amber"></div>
+        <div class="hf-leak-layer hf-leak-red"></div>
+        <div class="hf-leak-layer hf-leak-gold"></div>
+      </div>
+    </div>
+
+    <script>
+      window.__timelines = window.__timelines || {};
+
+      var leak = document.getElementById("przejscie-swiatlo-box");
+      var host = leak && leak.closest("[data-composition-id]");
+      if (!host) throw new Error("Organic Light Leak could not find its composition host");
+
+      var compositionId = host.getAttribute("data-composition-id");
+      var duration = Number(host.getAttribute("data-duration")) || 1.6;
+      var RUCH = (function () { var cs = getComputedStyle(document.documentElement), g = function (n, d) { var v = (cs.getPropertyValue(n) || "").trim().replace(/^["']|["']$/g, ""); return v || d; }; return { we: g("--ruch-wejscie", "power2.out"), wy: g("--ruch-wyjscie", "power2.in"), ak: g("--ruch-akcent", "back.out(2)"), pl: g("--ruch-plynny", "power2.inOut") }; })(); // styl ruchu marki (zloz: --ruch-*)
+      var tl = gsap.timeline({ paused: true });
+
+      tl.to({}, { duration: duration, ease: "none" }, 0);
+      tl.fromTo(
+        leak,
+        { opacity: 0 },
+        { opacity: 0.9, duration: duration * 0.24, ease: RUCH.we },
+        duration * 0.08,
+      );
+      tl.to(leak, { opacity: 0.46, duration: duration * 0.2, ease: RUCH.pl }, duration * 0.42);
+      tl.to(leak, { opacity: 0, duration: duration * 0.26, ease: RUCH.wy }, duration * 0.68);
+      tl.fromTo(
+        ".hf-leak-amber",
+        { xPercent: -20, scale: 0.92, rotation: -4 },
+        { xPercent: 18, scale: 1.1, rotation: 2, duration: duration, ease: RUCH.pl },
+        0,
+      );
+      tl.fromTo(
+        ".hf-leak-red",
+        { xPercent: 20, yPercent: -8, scale: 1.08 },
+        { xPercent: -16, yPercent: 8, scale: 0.94, duration: duration, ease: RUCH.pl },
+        0,
+      );
+      tl.fromTo(
+        ".hf-leak-gold",
+        { xPercent: -28, rotation: -6 },
+        { xPercent: 24, rotation: 4, duration: duration, ease: RUCH.pl },
+        0,
+      );
+
+      window.__timelines[compositionId] = tl;
+    </script>
+  </body>
+</html>

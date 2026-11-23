@@ -1,0 +1,76 @@
+<!doctype html>
+<!--
+  tekst-natywny: tekst jak wpisany w aplikacji Instagrama / TikToka (montaż naturalny, nie reklama).
+  Każda linia w osobnej zaokrąglonej ramce, zwykły bezszeryfowy font, bez kolorów marki i bez animacji
+  „z agencji”: tekst po prostu się pojawia (krótkie 0,12 s) i znika.
+  Zmienne: tekst (| = nowa linia), tlo biale/czarne/brak, pozycja gora/srodek/dol, rozmiar (px)
+-->
+<html
+  lang="pl"
+  data-composition-id="tekst-natywny"
+  data-composition-duration="3"
+  data-composition-variables='[
+    {"id":"tekst","type":"string","label":"Tekst (| = nowa linia)","default":"nikt mi tego nie powiedział|przed laminacją 🙈"},
+    {"id":"tlo","type":"enum","label":"Ramka","default":"biale","options":[{"value":"biale","label":"Biała"},{"value":"czarne","label":"Czarna"},{"value":"brak","label":"Bez ramki (biały tekst)"}]},
+    {"id":"pozycja","type":"enum","label":"Pozycja","default":"gora","options":[{"value":"gora","label":"Góra"},{"value":"srodek","label":"Środek"},{"value":"dol","label":"Nad napisami"}]},
+    {"id":"rozmiar","type":"number","label":"Rozmiar (px)","default":58}
+  ]'
+>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Tekst natywny (jak z Instagrama)</title>
+  </head>
+  <body>
+    <template>
+      <div id="root" data-composition-id="tekst-natywny" data-duration="3" data-fps="30">
+        <style>
+          #root { position: absolute; inset: 0; pointer-events: none; }
+          .tn-clip { position: absolute; inset: 0; }
+          .tn { position: absolute; left: var(--safe-left, 60px); right: var(--safe-right, 140px); display: flex; flex-direction: column; align-items: center; text-align: center; font-family: var(--font-tekst, "Montserrat"), sans-serif; font-weight: 600; line-height: 1.12; }
+          .tn-l { display: inline-block; max-width: 100%; padding: 0.16em 0.42em 0.2em; border-radius: 0.32em; margin-top: -0.04em; white-space: pre-wrap; }
+          .tn.biale .tn-l { background: #ffffff; color: #000000; }
+          .tn.czarne .tn-l { background: #000000; color: #ffffff; }
+          .tn.brak .tn-l { color: #ffffff; text-shadow: 0 2px 4px rgba(0, 0, 0, 0.55), 0 0 14px rgba(0, 0, 0, 0.35); }
+        </style>
+        <div id="tekst-natywny-clip" class="clip tn-clip" data-start="0" data-duration="3" data-track-index="0">
+          <div id="tekst-natywny-box" class="tn biale"></div>
+        </div>
+        <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+        <script>
+          (function () {
+            var ID = "tekst-natywny";
+            var $ = function (s) { return document.getElementById(ID + "-" + s); };
+            var D = parseFloat($("clip").getAttribute("data-duration")) || 3;
+            var v = window.__hyperframes && window.__hyperframes.getVariables ? window.__hyperframes.getVariables() : {};
+            var tekst = v.tekst == null ? "nikt mi tego nie powiedział|przed laminacją 🙈" : String(v.tekst);
+            var tlo = ["biale", "czarne", "brak"].indexOf(v.tlo) >= 0 ? v.tlo : "biale";
+            var poz = ["gora", "srodek", "dol"].indexOf(v.pozycja) >= 0 ? v.pozycja : "gora";
+            var size = Math.max(30, Math.min(96, Number(v.rozmiar) || 58));
+            var box = $("box");
+            box.className = "tn " + tlo;
+            box.style.fontSize = size + "px";
+            // pozycja: góra pod strefą UI IG, środek, nad napisami (napisy od dołu 620 px)
+            if (poz === "gora") box.style.top = "calc(var(--safe-top, 220px) + 170px)";
+            else if (poz === "srodek") { box.style.top = "50%"; gsap.set(box, { yPercent: -50 }); }
+            else box.style.bottom = "calc(var(--napisy-od-dolu, 620px) + 150px)";
+            tekst.split("|").map(function (t) { return t.trim(); }).filter(Boolean).forEach(function (t, i) {
+              var l = document.createElement("div");
+              l.className = "tn-l";
+              l.id = ID + "-l" + i;
+              l.textContent = t;
+              box.appendChild(l);
+            });
+            var RUCH = (function () { var cs = getComputedStyle(document.documentElement), g = function (n, d) { var v = (cs.getPropertyValue(n) || "").trim().replace(/^["']|["']$/g, ""); return v || d; }; return { we: g("--ruch-wejscie", "power2.out"), wy: g("--ruch-wyjscie", "power2.in"), ak: g("--ruch-akcent", "back.out(2)"), pl: g("--ruch-plynny", "power2.inOut") }; })(); // styl ruchu marki (zloz: --ruch-*)
+            var tl = gsap.timeline({ paused: true });
+            // jak w aplikacji: tekst jest od razu, tylko bardzo krótkie wejście, żeby nie mignął
+            tl.fromTo(box, { opacity: 0, scale: 0.97 }, { opacity: 1, scale: 1, duration: 0.12, ease: RUCH.we }, 0);
+            tl.to(box, { opacity: 0, duration: 0.1, ease: RUCH.wy }, Math.max(0.3, D - 0.1));
+            tl.set(box, { visibility: "hidden" }, Math.max(0.31, D - 0.005));
+            window.__timelines = window.__timelines || {};
+            window.__timelines[ID] = tl;
+          })();
+        </script>
+      </div>
+    </template>
+  </body>
+</html>

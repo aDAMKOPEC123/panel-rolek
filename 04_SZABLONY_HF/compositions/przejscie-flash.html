@@ -1,0 +1,132 @@
+<!-- hyperframes-registry-item: przejscie-flash -->
+<!-- przejscie-flash: z katalogu HyperFrames (editorial-flash-overlay), przerobione na pion. Błysk wypada w 58% długości: zloz ustawia start = cięcie - 0.58 * czas. -->
+<!doctype html>
+<html lang="pl">
+  <head>
+    <meta charset="UTF-8" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        width: 1080px;
+        height: 1920px;
+        margin: 0;
+        overflow: hidden;
+        background: transparent;
+      }
+
+      #przejscie-flash-flash {
+        --hf-editorial-flash-wash: 255 253 250;
+        --hf-editorial-flash-warm: 255 174 105;
+        --hf-editorial-flash-cool: 183 218 255;
+        position: absolute;
+        inset: -12%;
+        overflow: hidden;
+        pointer-events: none;
+      }
+
+      #przejscie-flash-flash .ef-layer {
+        position: absolute;
+        inset: 0;
+        opacity: 0;
+        will-change: opacity, transform;
+      }
+
+      #przejscie-flash-wash {
+        background: rgb(var(--hf-editorial-flash-wash));
+      }
+
+      #przejscie-flash-core {
+        inset: -18%;
+        background: radial-gradient(
+          ellipse 68% 92% at 37% 47%,
+          rgb(255 255 255) 0%,
+          rgb(255 255 255 / 98%) 20%,
+          rgb(var(--hf-editorial-flash-wash) / 86%) 45%,
+          rgb(var(--hf-editorial-flash-warm) / 32%) 67%,
+          transparent 86%
+        );
+        mix-blend-mode: screen;
+        transform-origin: 38% 48%;
+      }
+
+      #przejscie-flash-sweep {
+        inset: -28%;
+        background: linear-gradient(
+          108deg,
+          transparent 21%,
+          rgb(var(--hf-editorial-flash-warm) / 10%) 38%,
+          rgb(var(--hf-editorial-flash-wash) / 90%) 49%,
+          rgb(255 255 255 / 98%) 53%,
+          rgb(var(--hf-editorial-flash-cool) / 24%) 62%,
+          transparent 79%
+        );
+        mix-blend-mode: screen;
+      }
+    </style>
+  </head>
+  <body>
+    <div
+      id="przejscie-flash"
+      data-composition-id="przejscie-flash"
+      data-start="0"
+      data-duration="1"
+      data-width="1080"
+      data-height="1920"
+    >
+      <div id="przejscie-flash-flash" aria-hidden="true">
+        <div id="przejscie-flash-wash" class="ef-layer"></div>
+        <div id="przejscie-flash-core" class="ef-layer" data-layout-allow-overflow></div>
+        <div id="przejscie-flash-sweep" class="ef-layer" data-layout-allow-overflow></div>
+      </div>
+    </div>
+
+    <script>
+      window.__timelines = window.__timelines || {};
+
+      var flash = document.getElementById("przejscie-flash-flash");
+      var host = flash && flash.closest("[data-composition-id]");
+      if (!host) throw new Error("Editorial Flash could not find its composition host");
+
+      var compositionId = host.getAttribute("data-composition-id");
+      var duration = Number(host.getAttribute("data-duration")) || 1;
+      var hit = Math.max(0.12, duration * 0.58);
+      var RUCH = (function () { var cs = getComputedStyle(document.documentElement), g = function (n, d) { var v = (cs.getPropertyValue(n) || "").trim().replace(/^["']|["']$/g, ""); return v || d; }; return { we: g("--ruch-wejscie", "power2.out"), wy: g("--ruch-wyjscie", "power2.in"), ak: g("--ruch-akcent", "back.out(2)"), pl: g("--ruch-plynny", "power2.inOut") }; })(); // styl ruchu marki (zloz: --ruch-*)
+      var tl = gsap.timeline({ paused: true });
+
+      tl.to({}, { duration: duration, ease: "none" }, 0);
+      tl.to("#przejscie-flash-wash", { opacity: 0.92, duration: 0.04, ease: RUCH.wy }, hit);
+      tl.fromTo(
+        "#przejscie-flash-core",
+        { opacity: 0, scale: 0.86, rotation: -5 },
+        { opacity: 1, scale: 1, rotation: -5, duration: 0.05, ease: RUCH.wy },
+        hit - 0.01,
+      );
+      tl.fromTo(
+        "#przejscie-flash-sweep",
+        { opacity: 0, xPercent: -12, rotation: -2 },
+        { opacity: 0.9, xPercent: 8, rotation: -2, duration: 0.04, ease: RUCH.wy },
+        hit,
+      );
+      tl.to("#przejscie-flash-wash", { opacity: 0, duration: 0.18, ease: RUCH.we }, hit + 0.04);
+      tl.to(
+        "#przejscie-flash-core",
+        { opacity: 0, scale: 1.18, rotation: -5, duration: 0.34, ease: RUCH.we },
+        hit + 0.04,
+      );
+      tl.to(
+        "#przejscie-flash-sweep",
+        { opacity: 0, xPercent: 28, rotation: -2, duration: 0.3, ease: RUCH.we },
+        hit + 0.04,
+      );
+
+      window.__timelines[compositionId] = tl;
+    </script>
+  </body>
+</html>

@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="pl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Rolki · panel</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,600;0,700;1,600&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header id="gora">
+      <button id="logo" class="logo" title="Start">Rolki<span>·</span><em>panel</em></button>
+      <div id="projektNazwa" class="projekt-nazwa"></div>
+      <nav id="kroki" class="kroki"></nav>
+      <button id="telefonBtn" class="opcje-btn" title="Wgrywaj nagrania prosto z telefonu (kod QR)">📱 Telefon</button>
+      <button id="opcjeBtn" class="opcje-btn" title="Włącz albo wyłącz pomoce w panelu">⚙ Opcje</button>
+      <button id="claudeBtn" class="claude-btn" title="Poproś Claude">✦ Poproś Claude</button>
+    </header>
+    <main id="ekran"></main>
+
+    <section id="zadanie" class="zadanie ukryte" aria-live="polite">
+      <div class="zadanie-gora">
+        <span id="zadanieOpis"></span>
+        <div class="pasek"><div id="zadaniePasek"></div></div>
+        <button id="zadanieLog" class="btn maly jasny">Log</button>
+        <button id="zadanieStop" class="btn maly jasny">Przerwij</button>
+        <button id="zadanieZamknij" class="btn maly jasny" title="Zamknij">✕</button>
+      </div>
+      <div id="zadanieBlad" class="ramka-bledu ukryte"></div>
+      <pre id="zadanieLinie" class="log ukryte"></pre>
+    </section>
+
+    <aside id="claude" class="claude ukryte">
+      <div class="claude-gora"><h3>Poproś Claude</h3><button id="claudeZamknij" class="btn maly jasny">✕</button></div>
+      <button class="btn dokoncz" data-asystent style="width:100%;margin-bottom:12px">✦ Poprowadź mnie pytaniami (dokończ rolkę)</button>
+      <div id="claudeChipy" class="chipy"></div>
+      <textarea id="claudeTekst" rows="5" placeholder="Napisz, co Claude ma zrobić. Kontekst rolki doklejam sama."></textarea>
+      <details><summary>Pełny prompt, który zostanie wysłany</summary><pre id="claudePelny" class="log"></pre></details>
+      <div class="rzad">
+        <button id="claudeKopiuj" class="btn jasny">Kopiuj prompt</button>
+        <button id="claudeWyslij" class="btn">Wyślij do Claude</button>
+      </div>
+      <p id="claudeInfo" class="podpowiedz"></p>
+      <pre id="claudeLog" class="log claude-log"></pre>
+    </aside>
+
+    <aside id="asystent" class="claude asystent ukryte" aria-live="polite">
+      <div class="claude-gora"><h3>✦ Dokończ z Claude</h3><div class="rzad"><button id="asystentNowa" class="btn maly jasny" title="Zacznij rozmowę od nowa">Od nowa</button><button id="asystentZamknij" class="btn maly jasny">✕</button></div></div>
+      <p class="podpowiedz" id="asystentOpis" style="margin:0 0 10px">Claude sprawdzi, czego brakuje w rolce, zada Ci kilka pytań i sam uzupełni brief, ujęcia i sceny.</p>
+      <div id="asystentRozmowa" class="asystent-rozmowa"></div>
+      <div id="asystentPracuje" class="asystent-pracuje ukryte"><span class="kropki"><i></i><i></i><i></i></span> <span id="asystentStatus">Claude sprawdza rolkę…</span></div>
+      <div id="asystentOpcje" class="chipy asystent-opcje"></div>
+      <div class="asystent-pisz"><textarea id="asystentTekst" rows="2" placeholder="Albo napisz własną odpowiedź…"></textarea><button id="asystentWyslij" class="btn">Wyślij</button></div>
+    </aside>
+
+    <div id="modal" class="modal ukryte"><div class="modal-okno" id="modalOkno"></div></div>
+    <div id="toast" class="toast ukryte"></div>
+    <script type="module">import { odmienImie } from "/lib/osoba.mjs"; window.odmienImie = odmienImie; window.dispatchEvent(new Event("osoba-gotowa"));</script>
+    <script src="vendor/hyperframes-player.global.js"></script>
+    <script src="edytor.js"></script>
+    <script src="licencja.js"></script>
+    <script src="app.js"></script>
+    <script src="stylistyka.js"></script>
+    <script src="telefon.js"></script>
+    <script src="prosty.js"></script>
+    <script src="kreator.js"></script>
+    <script src="plan.js"></script>
+    <script src="pomysly.js"></script>
+    <script src="instagram.js"></script>
+    <script src="kalendarz.js"></script>
+  </body>
+</html>

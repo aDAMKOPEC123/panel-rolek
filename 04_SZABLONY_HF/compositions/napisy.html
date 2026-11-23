@@ -1,0 +1,355 @@
+<!doctype html>
+<!--
+  napisy: napisy słowo po słowie z podświetleniem, w 3 stylach beauty.
+  Style (zmienna "styl"), mechanika wzięta z katalogu HyperFrames:
+    perla   kremowa pigułka, słowa zapalają się z beżu na brąz  (caption-pill-karaoke)
+    waga    bez tła, aktywne słowo z cienkiego na grube         (caption-weight-shift)
+    marker  pudrowy marker pod aktywnym słowem                   (caption-highlight)
+    vlog    jak u twórczyń (montaż naturalny): biały bezszeryf z cieniem, bez tła i kolorów marki, słowo pojawia się, gdy pada
+    este    granatowy szeryf na białym boksie, słowo kluczowe złotą kursywą, spokojne wejście (fade + slide)
+  Słowa: tablica między markerami SLOWA_START / SLOWA_END. Skrypt zloz wstawia tam
+  transcript.json rolki (format hyperframes transcribe: {text|word, start, end}).
+  nacisk: napisy reagują na głos. zloz mierzy w nagraniu głośność, wysokość i przeciąganie każdego słowa
+  (scripts/nacisk-glosu.mjs) i dopisuje "n": 2 mocny akcent (kolor akcentu, uderzenie, drgnięcie),
+  1 lekki (mały pop), -1 ściszone (mniejsze). Zmiana tylko przez transform na .np-t, więc linie się nie przesuwają.
+  wyroznij: słowa kluczowe po przecinku (nazwa zabiegu, preparatu). Pasuje po początku
+  słowa, więc "brwi" złapie też "brwiami". Liczby są wyróżniane zawsze.
+  Max 2 linie, max N słów w grupie, jedna grupa na ekranie, twarde wyłączenie po grupie.
+-->
+<html
+  lang="pl"
+  data-composition-id="napisy"
+  data-composition-duration="6"
+  data-composition-variables='[
+    {"id":"styl","type":"enum","label":"Styl napisów","default":"perla","options":[{"value":"perla","label":"Perła (pigułka)"},{"value":"waga","label":"Waga (elegancki)"},{"value":"marker","label":"Marker"},{"value":"este","label":"Este (szeryf, złota kursywa)"},{"value":"vlog","label":"Vlog (naturalny)"}]},
+    {"id":"wyroznij","type":"string","label":"Słowa kluczowe (po przecinku)","default":"laminacja,brwi"},
+    {"id":"slow_w_grupie","type":"number","label":"Maks. słów w grupie","default":4,"min":2,"max":6,"step":1},
+    {"id":"emoji","type":"boolean","label":"Emoji nad słowami (brwi, skóra, cena...)","default":false},
+    {"id":"nacisk","type":"boolean","label":"Napisy reagują na głos (ustawia zloz)","default":false}
+  ]'
+>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Napisy</title>
+  </head>
+  <body>
+    <template>
+      <div id="root" data-composition-id="napisy" data-duration="6" data-fps="30">
+        <style>
+          #root {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+          }
+          .np-clip {
+            position: absolute;
+            inset: 0;
+            overflow: visible;
+          }
+          .np-group {
+            position: absolute;
+            left: var(--safe-left, 60px);
+            right: var(--safe-right, 140px);
+            bottom: var(--napisy-od-dolu, 620px);
+            display: flex;
+            justify-content: center;
+            opacity: 0;
+            overflow: visible;
+          }
+          .np-box {
+            display: inline-flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            overflow: visible;
+            font-family: var(--font-tekst, "Montserrat"), sans-serif;
+            font-weight: 700;
+            line-height: 1.18;
+          }
+          .np-line {
+            display: flex;
+            justify-content: center;
+            gap: 0 0.28em;
+            white-space: nowrap;
+          }
+          .np-word {
+            position: relative;
+            display: inline-block;
+          }
+          .np-word .np-t {
+            position: relative;
+            z-index: 1;
+            display: inline-block;
+            transform-origin: 50% 85%;
+          }
+          .np-word .np-mk {
+            position: absolute;
+            left: -0.14em;
+            right: -0.14em;
+            top: 0.08em;
+            bottom: 0.02em;
+            border-radius: 0.18em;
+            background: var(--akcent, #b07a6e);
+            transform-origin: left center;
+            opacity: 0;
+          }
+          /* emoji nad słowem (zmienna emoji): nie zmienia szerokości linii */
+          .np-word .np-emoji {
+            position: absolute;
+            left: 50%;
+            bottom: 92%;
+            z-index: 2;
+            font-size: 1.05em;
+            line-height: 1;
+            font-weight: 400;
+            text-shadow: none;
+            opacity: 0;
+          }
+          /* perla */
+          .s-perla .np-box {
+            padding: 0.32em 0.8em 0.38em;
+            border-radius: 0.5em;
+            background: color-mix(in srgb, var(--tlo-jasne, #f7f1ec) 94%, transparent);
+            box-shadow: 0 10px 34px rgba(43, 35, 33, 0.16);
+          }
+          .s-perla .np-word { color: #b9a69c; }
+          /* waga i marker: scrim dopasowany do tekstu (HF: jasne tło > 60 jasności = scrim 30-40%) */
+          .s-waga .np-box,
+          .s-marker .np-box {
+            padding: 0.18em 0.5em 0.24em;
+            border-radius: 0.4em;
+            background: rgba(43, 35, 33, 0.36);
+          }
+          /* waga */
+          .s-waga .np-word {
+            color: var(--bialy, #fff);
+            font-weight: 400;
+            text-shadow: 0 3px 18px rgba(0, 0, 0, 0.55), 0 1px 3px rgba(0, 0, 0, 0.35);
+          }
+          /* este: granatowy szeryf na półprzezroczystym białym boksie, słowo kluczowe złotą kursywą */
+          .s-este .np-box {
+            padding: 0.26em 0.75em 0.34em;
+            border-radius: 0.34em;
+            background: rgba(255, 255, 255, 0.86);
+            box-shadow: 0 12px 36px rgba(8, 32, 50, 0.1);
+            font-family: var(--font-naglowki, "Playfair Display"), serif;
+            font-weight: 600;
+            line-height: 1.16;
+          }
+          .s-este .np-word { color: var(--tekst, #082032); }
+          .s-este .np-word.np-key { color: var(--akcent, #c8a15f); font-style: italic; }
+          /* vlog: jak napisy z aplikacji twórczyń, bez tła i bez kolorów marki */
+          .s-vlog .np-word {
+            color: #ffffff;
+            font-weight: 700;
+            text-shadow: 0 0 3px rgba(0, 0, 0, 0.85), 0 2px 8px rgba(0, 0, 0, 0.55);
+          }
+          /* marker */
+          .s-marker .np-word {
+            color: var(--bialy, #fff);
+            text-shadow: 0 3px 16px rgba(0, 0, 0, 0.5);
+          }
+        </style>
+        <div id="napisy-clip" class="clip np-clip" data-start="0" data-duration="6" data-track-index="0" data-layout-allow-caption-zone></div>
+        <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+        <script>
+          (function () {
+            var ID = "napisy";
+            var clip = document.getElementById(ID + "-clip");
+            var D = parseFloat(clip.getAttribute("data-duration")) || 6;
+            var v = window.__hyperframes && window.__hyperframes.getVariables ? window.__hyperframes.getVariables() : {};
+            var styl = ["perla", "waga", "marker", "este", "vlog"].indexOf(v.styl) >= 0 ? v.styl : "perla";
+            var MAX_WORDS = Math.max(2, Math.min(6, Number(v.slow_w_grupie) || 4));
+            var EMOJI = v.emoji === true || v.emoji === "true";
+            var NACISK = v.nacisk === true || v.nacisk === "true";
+            // Początek słowa -> emoji. Max jedno emoji na grupę napisów.
+            var SLOWNIK = [
+              ["brw", "🤎"], ["rzęs", "👁️"], ["rzes", "👁️"], ["skór", "✨"], ["skor", "✨"], ["cer", "✨"], ["twarz", "🌸"],
+              ["stop", "🦶"], ["stóp", "🦶"], ["pięt", "🦶"], ["paznok", "💅"], ["pedicure", "💅"], ["manicure", "💅"],
+              ["krem", "🧴"], ["serum", "💧"], ["nawilż", "💧"], ["wod", "💧"], ["tydz", "📅"], ["tygod", "📅"],
+              ["miesi", "📅"], ["minut", "⏱️"], ["godzin", "⏱️"], ["cen", "💸"], ["zł", "💸"], ["złot", "💸"],
+              ["laminac", "✨"], ["henn", "🎨"], ["kolor", "🎨"], ["błąd", "❌"], ["błęd", "❌"], ["mit", "🤔"],
+              ["fakt", "✅"], ["uwag", "⚠️"], ["słońc", "☀️"], ["spf", "☀️"], ["efekt", "😍"], ["glow", "✨"]
+            ];
+            function emojiDla(t) {
+              var c = t.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+              for (var i = 0; i < SLOWNIK.length; i++) if (c.indexOf(SLOWNIK[i][0]) === 0) return SLOWNIK[i][1];
+              return null;
+            }
+            var KEYS = String(v.wyroznij == null ? "laminacja,brwi" : v.wyroznij)
+              .toLowerCase().split(",").map(function (s) { return s.trim(); }).filter(Boolean);
+
+            var SLOWA = /*SLOWA_START*/[
+              { "text": "Laminacja", "start": 0.3, "end": 0.85 },
+              { "text": "brwi", "start": 0.85, "end": 1.2 },
+              { "text": "to", "start": 1.25, "end": 1.35 },
+              { "text": "nie", "start": 1.35, "end": 1.5 },
+              { "text": "jest", "start": 1.5, "end": 1.65 },
+              { "text": "trwała.", "start": 1.65, "end": 2.2 },
+              { "text": "Efekt", "start": 2.5, "end": 2.8 },
+              { "text": "trzyma", "start": 2.8, "end": 3.1 },
+              { "text": "się", "start": 3.1, "end": 3.25 },
+              { "text": "około", "start": 3.25, "end": 3.6 },
+              { "text": "6", "start": 3.6, "end": 3.8 },
+              { "text": "tygodni.", "start": 3.8, "end": 4.4 },
+              { "text": "Zależy", "start": 4.7, "end": 5.0 },
+              { "text": "od", "start": 5.0, "end": 5.1 },
+              { "text": "Twoich", "start": 5.1, "end": 5.4 },
+              { "text": "włosków.", "start": 5.4, "end": 5.9 }
+            ]/*SLOWA_END*/;
+
+            var FONT = styl === "este" ? "Playfair Display" : "Montserrat";
+            var BASE = styl === "este" ? 64 : styl === "vlog" ? 58 : 66, MIN = 46;
+            var MAXW = 1080 - 60 - 140 - (styl === "perla" || styl === "este" ? 110 : 70);
+
+            var words = SLOWA.map(function (w) {
+              return { text: String(w.text || w.word || "").trim(), start: Math.max(0, +w.start || 0), end: Math.max(+w.start || 0, +w.end || 0), n: NACISK && styl !== "vlog" ? +w.n || 0 : 0 };
+            }).filter(function (w) { return w.text.length > 0 && /[\p{L}\p{N}]/u.test(w.text) && w.start < D; });
+
+            function isKey(t) {
+              var clean = t.toLowerCase().replace(/[^\p{L}\p{N}%]/gu, "");
+              if (/\d/.test(clean)) return true;
+              for (var i = 0; i < KEYS.length; i++) {
+                var k = KEYS[i].replace(/[^\p{L}\p{N}\s]/gu, "");
+                if (k && clean.indexOf(k.slice(0, Math.max(3, k.length - 2))) === 0 && clean.length >= Math.min(k.length, 3)) return true;
+              }
+              return false;
+            }
+            var ctx = document.createElement("canvas").getContext("2d");
+            function wWidth(t, size) { ctx.font = "800 " + size + "px " + FONT; return ctx.measureText(t).width * 1.08; }
+            function lineW(ws, size) { return ws.reduce(function (a, w, i) { return a + wWidth(w.text, size) + (i ? size * 0.28 : 0); }, 0); }
+            function split(ws, size) {
+              if (lineW(ws, size) <= MAXW) return [ws];
+              var best = null, diff = Infinity;
+              for (var s = 1; s < ws.length; s++) {
+                var a = lineW(ws.slice(0, s), size), b = lineW(ws.slice(s), size);
+                if (a <= MAXW && b <= MAXW && Math.abs(a - b) < diff) { diff = Math.abs(a - b); best = [ws.slice(0, s), ws.slice(s)]; }
+              }
+              return best;
+            }
+            function fits(ws) { return !!split(ws, MIN); }
+
+            // Grupy: koniec zdania, pauza >= 0.15 s, limit słów albo 2 linii.
+            var groups = [], cur = [];
+            words.forEach(function (w, i) {
+              var next = words[i + 1];
+              if (cur.length && (cur.length + 1 > MAX_WORDS || !fits(cur.concat([w])))) { groups.push(cur); cur = []; }
+              cur.push(w);
+              var punct = /[.!?…,:;]$/.test(w.text);
+              var pause = next ? next.start - w.end : 1;
+              if (!next || punct || pause >= 0.15 || cur.length >= MAX_WORDS) { groups.push(cur); cur = []; }
+            });
+            if (cur.length) groups.push(cur);
+
+            clip.classList.add("s-" + styl);
+            var RUCH = (function () { var cs = getComputedStyle(document.documentElement), g = function (n, d) { var v = (cs.getPropertyValue(n) || "").trim().replace(/^["']|["']$/g, ""); return v || d; }; return { we: g("--ruch-wejscie", "power2.out"), wy: g("--ruch-wyjscie", "power2.in"), ak: g("--ruch-akcent", "back.out(2)"), pl: g("--ruch-plynny", "power2.inOut") }; })(); // styl ruchu marki (zloz: --ruch-*)
+            var tl = gsap.timeline({ paused: true });
+            var ACT = styl === "perla" ? "var(--tekst, #2b2321)" : "var(--bialy, #fff)";
+            var KEYC = styl === "vlog" ? "#ffffff" : styl === "waga" ? "color-mix(in srgb, var(--akcent, #b07a6e) 35%, #ffe9e2)" : "var(--akcent, #b07a6e)";
+
+            groups.forEach(function (g, gi) {
+              // maks. jeden mocny akcent na grupę napisów (pierwszy), kolejne w tej grupie jako lekkie
+              var bylMocny = false;
+              g.forEach(function (w) { if (w.n === 2) { if (bylMocny) w.n = 1; bylMocny = true; } });
+              var size = BASE;
+              while (size > MIN && !split(g, size)) size -= 2;
+              var lines = split(g, size) || [g];
+              var el = document.createElement("div");
+              el.className = "np-group";
+              el.id = ID + "-g" + gi;
+              var box = document.createElement("div");
+              box.className = "np-box";
+              box.style.fontSize = size + "px";
+              var spans = [];
+              var maEmoji = false;
+              lines.slice(0, 2).forEach(function (lw) {
+                var line = document.createElement("div");
+                line.className = "np-line";
+                lw.forEach(function (w) {
+                  var s = document.createElement("span");
+                  s.className = "np-word";
+                  var mk = document.createElement("span");
+                  mk.className = "np-mk";
+                  var t = document.createElement("span");
+                  t.className = "np-t";
+                  t.textContent = w.text;
+                  s.appendChild(mk);
+                  s.appendChild(t);
+                  var em = null;
+                  var e = EMOJI && !maEmoji ? emojiDla(w.text) : null;
+                  if (e) {
+                    em = document.createElement("span");
+                    em.className = "np-emoji";
+                    em.textContent = e;
+                    s.appendChild(em);
+                    maEmoji = true;
+                  }
+                  line.appendChild(s);
+                  var key = isKey(w.text) || w.n === 2;
+                  if (key) s.classList.add("np-key");
+                  spans.push({ el: s, t: t, mk: mk, em: em, w: w, key: key });
+                });
+                box.appendChild(line);
+              });
+              el.appendChild(box);
+              clip.appendChild(el);
+
+              var nxt = groups[gi + 1];
+              var gStart = Math.max(0, g[0].start - 0.06);
+              var gEnd = Math.min(D, nxt ? Math.min(nxt[0].start - 0.04, g[g.length - 1].end + 0.35) : g[g.length - 1].end + 0.3);
+              if (gEnd <= gStart + 0.1) gEnd = gStart + 0.1;
+
+              if (styl === "vlog") tl.fromTo(el, { opacity: 0 }, { opacity: 1, duration: 0.06, ease: "none" }, gStart);
+              else if (styl === "este") tl.fromTo(el, { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.24, ease: RUCH.we }, gStart);
+              else tl.fromTo(el, { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.14, ease: RUCH.we }, gStart);
+              spans.forEach(function (sp) {
+                var on = Math.max(gStart, sp.w.start - 0.04);
+                if (sp.w.n === 2) {
+                  // uderzenie na słowie z naciskiem: szybkie powiększenie, krótkie drgnięcie, powrót
+                  tl.set(sp.t, { scale: 1, rotation: 0 }, gStart);
+                  tl.to(sp.t, { scale: 1.2, duration: 0.11, ease: RUCH.we }, on);
+                  tl.to(sp.t, { keyframes: [{ rotation: -3, duration: 0.05 }, { rotation: 2.5, duration: 0.06 }, { rotation: -1.2, duration: 0.06 }, { rotation: 0, duration: 0.07 }], ease: RUCH.pl }, on + 0.08);
+                  tl.to(sp.t, { scale: 1.08, duration: 0.35, ease: RUCH.ak }, on + 0.13);
+                } else if (sp.w.n === 1) {
+                  tl.set(sp.t, { scale: 1 }, gStart);
+                  tl.to(sp.t, { keyframes: [{ scale: 1.09, duration: 0.1, ease: RUCH.we }, { scale: 1, duration: 0.25, ease: RUCH.pl }] }, on);
+                } else if (sp.w.n === -1) {
+                  tl.set(sp.t, { scale: 0.86, opacity: 0.82 }, gStart);
+                }
+                var col = sp.key ? KEYC : ACT;
+                if (sp.em) {
+                  tl.set(sp.em, { xPercent: -50, scale: 0, opacity: 0, rotation: -12 }, gStart);
+                  tl.to(sp.em, { scale: 1, opacity: 1, rotation: 0, duration: 0.28, ease: RUCH.ak }, on);
+                }
+                if (styl === "perla") {
+                  tl.set(sp.el, { color: "#b9a69c" }, gStart);
+                  tl.to(sp.el, { color: col, duration: 0.1, ease: "none" }, on);
+                } else if (styl === "este") {
+                  // Słowa rozjaśniają się łagodnie z mgły do pełnego koloru i lekko podnoszą, bez skakania.
+                  tl.set(sp.el, { opacity: 0.28, y: 6 }, gStart);
+                  tl.to(sp.el, { opacity: 1, y: 0, duration: 0.18, ease: RUCH.we }, on);
+                } else if (styl === "vlog") {
+                  tl.set(sp.el, { opacity: 0 }, gStart);
+                  tl.to(sp.el, { opacity: 1, duration: 0.05, ease: "none" }, on);
+                } else if (styl === "waga") {
+                  tl.set(sp.el, { fontWeight: 400, color: sp.key ? KEYC : "#ffffff" }, gStart);
+                  tl.to(sp.el, { fontWeight: 800, duration: 0.1, ease: "none" }, on);
+                } else {
+                  tl.set(sp.mk, { opacity: 0, scaleX: 0 }, gStart);
+                  tl.set(sp.el, { color: "#ffffff" }, gStart);
+                  tl.to(sp.mk, { opacity: sp.key ? 1 : 0.82, scaleX: 1, duration: 0.14, ease: RUCH.we }, on);
+                  if (!sp.key) tl.to(sp.mk, { opacity: 0, duration: 0.12, ease: RUCH.wy }, Math.min(gEnd - 0.12, Math.max(on + 0.15, sp.w.end)));
+                }
+              });
+              tl.to(el, { opacity: 0, duration: 0.1, ease: RUCH.wy }, gEnd - 0.1);
+              tl.set(el, { opacity: 0, visibility: "hidden" }, gEnd);
+            });
+            tl.set({}, {}, D);
+            window.__timelines = window.__timelines || {};
+            window.__timelines[ID] = tl;
+          })();
+        </script>
+      </div>
+    </template>
+  </body>
+</html>

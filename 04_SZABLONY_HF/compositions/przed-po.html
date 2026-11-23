@@ -1,0 +1,210 @@
+<!doctype html>
+<!--
+  przed-po: porównanie przed/po w dwóch trybach.
+    wipe   suwak przesuwa się po kadrze i odsłania "po" (mechanika z katalogu: before-after-wipe)
+    split  ekran dzielony: przed na górze, po na dole
+    luk    kurtyna w kształcie łuku brwi zjeżdża przez twarz (zwalnia na brwiach) i odsłania "po".
+           Krzywą (zmienna "krzywa", JSON [[x,y],...] w pikselach 1080x1920) liczy zloz z mapy twarzy;
+           bez krzywej tryb wraca do "wipe". zloz też wyrównuje zdjęcia (scripts/przed_po.py).
+  Media (data-slot-media, podmienia skrypt zloz): przed, po. Zdjęcia .jpg/.png, najlepiej ten sam kadr.
+  Zmienne:
+    tryb, etykieta_przed, etykieta_po
+    dopisek   ZAWSZE widoczny. Pusty tekst wraca do "Efekt indywidualny". Zasada branżowa, nie wyłączamy.
+-->
+<html
+  lang="pl"
+  data-composition-id="przed-po"
+  data-composition-duration="4"
+  data-composition-variables='[
+    {"id":"tryb","type":"enum","label":"Tryb","default":"wipe","options":[{"value":"wipe","label":"Suwak (wipe)"},{"value":"split","label":"Podział ekranu"},{"value":"luk","label":"Po łuku brwi"}]},
+    {"id":"krzywa","type":"string","label":"Krzywa łuku brwi (ustawia zloz)","default":""},
+    {"id":"etykieta_przed","type":"string","label":"Etykieta przed","default":"przed"},
+    {"id":"etykieta_po","type":"string","label":"Etykieta po","default":"po"},
+    {"id":"dopisek","type":"string","label":"Dopisek (obowiązkowy)","default":"Efekt indywidualny, zależy od skóry i pielęgnacji"}
+  ]'
+>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Przed i po</title>
+  </head>
+  <body>
+    <template>
+      <div id="root" data-composition-id="przed-po" data-duration="4" data-fps="30">
+        <style>
+          #root {
+            position: absolute;
+            inset: 0;
+            overflow: hidden;
+            background: var(--tlo-jasne, #f7f1ec);
+            font-family: var(--font-tekst, "Montserrat"), sans-serif;
+          }
+          .pp-clip, .pp-stage, .pp-panel {
+            position: absolute;
+            inset: 0;
+          }
+          .pp-stage { --split: 0; --dy: -4000; }
+          .pp-panel img {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+          }
+          .wipe .pp-po {
+            clip-path: inset(0 calc((100 - var(--split)) * 1%) 0 0);
+          }
+          .split .pp-przed { bottom: 50%; }
+          .split .pp-po { top: 50%; }
+          .pp-div {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            left: calc(var(--split) * 1%);
+            width: 6px;
+            margin-left: -3px;
+            background: var(--bialy, #fff);
+            box-shadow: 0 0 18px rgba(0, 0, 0, 0.25);
+            opacity: 0;
+          }
+          .pp-knob {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            width: 84px;
+            height: 84px;
+            margin: -42px 0 0 -42px;
+            border-radius: 50%;
+            background: var(--bialy, #fff);
+            border: 6px solid var(--akcent, #b07a6e);
+          }
+          .split .pp-div, .luk .pp-div { display: none; }
+          .pp-luk { position: absolute; left: 0; top: 0; width: 1080px; height: 1920px; overflow: visible; display: none;
+            transform: translateY(calc(var(--dy, 0) * 1px)); filter: drop-shadow(0 0 14px rgba(0, 0, 0, 0.3)); }
+          .luk .pp-luk { display: block; }
+          .luk .pp-chip-po { left: calc(var(--safe-left, 60px) + 10px); top: calc(var(--safe-top, 220px) + 100px); }
+          .luk .pp-chip-przed { left: calc(var(--safe-left, 60px) + 10px); bottom: calc(var(--safe-bottom, 420px) + 150px); }
+          .pp-hline {
+            position: absolute;
+            left: 0;
+            right: 0;
+            top: 50%;
+            height: 8px;
+            margin-top: -4px;
+            background: var(--bialy, #fff);
+            display: none;
+          }
+          .split .pp-hline { display: block; }
+          .pp-chip {
+            position: absolute;
+            padding: 14px 30px 16px;
+            border-radius: 999px;
+            font-size: 38px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            background: color-mix(in srgb, var(--tlo-jasne, #f7f1ec) 92%, transparent);
+            color: var(--tekst, #2b2321);
+          }
+          .pp-chip-po { background: var(--akcent, #b07a6e); color: var(--bialy, #fff); }
+          .wipe .pp-chip-przed { right: calc(var(--safe-right, 140px) + 10px); top: calc(var(--safe-top, 220px) + 100px); }
+          .wipe .pp-chip-po { left: calc(var(--safe-left, 60px) + 10px); top: calc(var(--safe-top, 220px) + 100px); }
+          .split .pp-chip-przed { left: calc(var(--safe-left, 60px) + 10px); top: calc(var(--safe-top, 220px) + 100px); }
+          .split .pp-chip-po { left: calc(var(--safe-left, 60px) + 10px); top: 1000px; }
+          .pp-note {
+            position: absolute;
+            left: var(--safe-left, 60px);
+            right: var(--safe-right, 140px);
+            bottom: calc(var(--safe-bottom, 420px) + 30px);
+            text-align: center;
+          }
+          .pp-note span {
+            display: inline-block;
+            padding: 12px 26px 14px;
+            border-radius: 18px;
+            background: rgba(43, 35, 33, 0.62);
+            color: var(--bialy, #fff);
+            font-size: 30px;
+            font-weight: 500;
+            line-height: 1.3;
+          }
+        </style>
+        <div id="przed-po-clip" class="clip pp-clip" data-start="0" data-duration="4" data-track-index="0">
+          <div id="przed-po-stage" class="pp-stage">
+            <div class="pp-panel pp-przed"><img data-slot-media="przed" src="assets/demo/przed.jpg" alt="przed" /></div>
+            <div class="pp-panel pp-po"><img data-slot-media="po" src="assets/demo/po.jpg" alt="po" /></div>
+            <div id="przed-po-div" class="pp-div"><div class="pp-knob"></div></div>
+            <div class="pp-hline"></div>
+            <svg id="przed-po-luk" class="pp-luk" viewBox="0 0 1080 1920"><path id="przed-po-lukp" fill="none" stroke="#fff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" /></svg>
+            <div id="przed-po-chipa" class="pp-chip pp-chip-przed"></div>
+            <div id="przed-po-chipb" class="pp-chip pp-chip-po"></div>
+            <div id="przed-po-note" class="pp-note"><span id="przed-po-notetxt"></span></div>
+          </div>
+        </div>
+        <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+        <script>
+          (function () {
+            var ID = "przed-po";
+            var $ = function (s) { return document.getElementById(ID + "-" + s); };
+            var clip = $("clip");
+            var D = parseFloat(clip.getAttribute("data-duration")) || 4;
+            var v = window.__hyperframes && window.__hyperframes.getVariables ? window.__hyperframes.getVariables() : {};
+            var tryb = v.tryb === "split" ? "split" : v.tryb === "luk" ? "luk" : "wipe";
+            var krzywa = null;
+            try { krzywa = JSON.parse(v.krzywa || "null"); } catch (e) { krzywa = null; }
+            if (tryb === "luk" && !(krzywa && krzywa.length >= 3)) tryb = "wipe";
+            var stage = $("stage");
+            stage.classList.add(tryb);
+            $("chipa").textContent = v.etykieta_przed == null || v.etykieta_przed === "" ? "przed" : String(v.etykieta_przed);
+            $("chipb").textContent = v.etykieta_po == null || v.etykieta_po === "" ? "po" : String(v.etykieta_po);
+            var note = String(v.dopisek || "").trim();
+            if (!/indywidual/i.test(note)) note = "Efekt indywidualny" + (note ? ". " + note : "");
+            $("notetxt").textContent = note;
+
+            var RUCH = (function () { var cs = getComputedStyle(document.documentElement), g = function (n, d) { var v = (cs.getPropertyValue(n) || "").trim().replace(/^["']|["']$/g, ""); return v || d; }; return { we: g("--ruch-wejscie", "power2.out"), wy: g("--ruch-wyjscie", "power2.in"), ak: g("--ruch-akcent", "back.out(2)"), pl: g("--ruch-plynny", "power2.inOut") }; })(); // styl ruchu marki (zloz: --ruch-*)
+            var tl = gsap.timeline({ paused: true });
+            tl.fromTo(stage, { opacity: 0 }, { opacity: 1, duration: 0.25, ease: RUCH.we }, 0);
+            tl.fromTo($("note"), { opacity: 0 }, { opacity: 1, duration: 0.3, ease: RUCH.we }, 0.2);
+            if (tryb === "wipe") {
+              var s = D < 3 ? D / 3 : 1;
+              tl.fromTo(stage, { "--split": 0 }, { "--split": 100, duration: 1.1 * s, ease: RUCH.pl }, 0.35 * s);
+              tl.fromTo($("div"), { opacity: 0 }, { opacity: 1, duration: 0.2 * s, ease: RUCH.we }, 0.35 * s);
+              tl.to(stage, { "--split": 50, duration: 0.7 * s, ease: RUCH.pl }, 1.6 * s);
+              tl.fromTo($("chipa"), { opacity: 0 }, { opacity: 1, duration: 0.2 }, 0.1);
+              tl.fromTo($("chipb"), { opacity: 0 }, { opacity: 1, duration: 0.2 }, 0.9 * s);
+            } else if (tryb === "luk") {
+              // gładka krzywa (Catmull-Rom) przedłużona poziomo do krawędzi kadru
+              var P = krzywa.slice().sort(function (a, b) { return a[0] - b[0]; });
+              P.unshift([-40, P[0][1]]); P.push([1120, P[P.length - 1][1]]);
+              var G = [];
+              for (var i = 0; i < P.length - 1; i++) for (var j = 0; j < 6; j++) {
+                var t = j / 6, a = P[Math.max(0, i - 1)], b = P[i], c = P[i + 1], d = P[Math.min(P.length - 1, i + 2)], t2 = t * t, t3 = t2 * t;
+                G.push([0, 1].map(function (q) { return 0.5 * (2 * b[q] + (-a[q] + c[q]) * t + (2 * a[q] - 5 * b[q] + 4 * c[q] - d[q]) * t2 + (-a[q] + 3 * b[q] - 3 * c[q] + d[q]) * t3); }));
+              }
+              G.push(P[P.length - 1]);
+              var minY = Math.min.apply(null, G.map(function (p) { return p[1]; })), maxY = Math.max.apply(null, G.map(function (p) { return p[1]; }));
+              // "po" = obszar nad krzywą przesuniętą o --dy
+              var poly = ["-40px -4000px", "1120px -4000px"].concat(G.slice().reverse().map(function (p) { return p[0].toFixed(1) + "px calc(" + p[1].toFixed(1) + "px + var(--dy) * 1px)"; }));
+              clip.querySelector(".pp-po").style.clipPath = "polygon(" + poly.join(", ") + ")";
+              $("lukp").setAttribute("d", "M" + G.map(function (p) { return p[0].toFixed(1) + " " + p[1].toFixed(1); }).join(" L"));
+              var s2 = D < 3.5 ? D / 3.5 : 1, gora = -(maxY + 60), dol = 1920 - minY + 60;
+              tl.set(stage, { "--dy": gora }, 0);
+              tl.to(stage, { "--dy": -110, duration: 0.45 * s2, ease: RUCH.wy }, 0.3 * s2);
+              tl.to(stage, { "--dy": 110, duration: 1.0 * s2, ease: RUCH.pl }, 0.75 * s2);   // powoli przez brwi
+              tl.to(stage, { "--dy": dol, duration: 0.55 * s2, ease: RUCH.we }, 1.75 * s2);
+              tl.fromTo($("chipa"), { opacity: 0 }, { opacity: 1, duration: 0.2 }, 0.1);
+              tl.fromTo($("chipb"), { opacity: 0 }, { opacity: 1, duration: 0.25 }, 1.0 * s2);
+              tl.to($("chipa"), { opacity: 0, duration: 0.2 }, 1.9 * s2);
+              tl.to($("luk"), { opacity: 0, duration: 0.25 }, 2.2 * s2);
+            } else {
+              tl.fromTo(clip.querySelector(".pp-po"), { yPercent: 100 }, { yPercent: 0, duration: 0.55, ease: RUCH.we }, 0.3);
+              tl.fromTo([$("chipa"), $("chipb")], { opacity: 0 }, { opacity: 1, duration: 0.25, stagger: 0.35 }, 0.25);
+            }
+            tl.set({}, {}, D);
+            window.__timelines = window.__timelines || {};
+            window.__timelines[ID] = tl;
+          })();
+        </script>
+      </div>
+    </template>
+  </body>
+</html>

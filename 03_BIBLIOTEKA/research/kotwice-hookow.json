@@ -1,0 +1,54 @@
+{
+  "opis": "Ocenione przykłady hooków dla recenzentki AI (scripts/recenzent.mjs): trzymają skalę 1-10, żeby oceny się nie rozjeżdżały. Na start eksperckie; gdy będą wyniki z Instagrama, podmień na hooki z tego konta z ich % pominięć w 3 s.",
+  "zrodlo": "eksperckie (2026-11-19)",
+  "kotwice": [
+    {
+      "poziom": "słaby",
+      "tekst": "Zapraszam na laminację brwi!",
+      "mowisz": "Cześć, dzisiaj chciałam wam pokazać laminację brwi.",
+      "wizual": "prowadząca do kamery w gabinecie, statyczny kadr",
+      "oceny": { "zatrzymanie": 2, "ciekawosc": 1, "konkret": 3, "to_o_mnie": 2, "spojnosc": 4, "autentycznosc": 3 },
+      "dlaczego": "Powitanie i zapowiedź zamiast treści, zaproszenie brzmi jak reklama, nic nie otwiera pytania, obraz bez ruchu."
+    },
+    {
+      "poziom": "słaby",
+      "tekst": "Profesjonalny pedicure podologiczny",
+      "mowisz": "W naszym gabinecie oferujemy kompleksową pielęgnację stóp.",
+      "wizual": "logo gabinetu, potem pusty fotel",
+      "oceny": { "zatrzymanie": 1, "ciekawosc": 1, "konkret": 2, "to_o_mnie": 1, "spojnosc": 3, "autentycznosc": 1 },
+      "dlaczego": "Ulotka: słowa reklamowe, mowa o gabinecie, nie o widzu, logo na start to sygnał do przewinięcia."
+    },
+    {
+      "poziom": "średni",
+      "tekst": "3 błędy po laminacji brwi",
+      "mowisz": "Robisz te trzy błędy po laminacji?",
+      "wizual": "prowadząca do kamery, w rogu licznik 1/3",
+      "oceny": { "zatrzymanie": 5, "ciekawosc": 6, "konkret": 6, "to_o_mnie": 6, "spojnosc": 5, "autentycznosc": 6 },
+      "dlaczego": "Dobry temat i liczba, ale to bardzo znany szablon, a obraz nie pokazuje żadnego z błędów."
+    },
+    {
+      "poziom": "średni",
+      "tekst": "Ile *naprawdę* trzyma laminacja",
+      "mowisz": "Ile naprawdę trzyma laminacja brwi? Sprawdziłam.",
+      "wizual": "zbliżenie: szczoteczka czesze brwi do góry",
+      "oceny": { "zatrzymanie": 6, "ciekawosc": 7, "konkret": 6, "to_o_mnie": 6, "spojnosc": 7, "autentycznosc": 7 },
+      "dlaczego": "Pytanie, które klientki naprawdę zadają, „sprawdziłam” obiecuje odpowiedź z doświadczenia; obraz ładny, ale nie zaskakuje."
+    },
+    {
+      "poziom": "mocny",
+      "tekst": "Myślała, że ma za *rzadkie* brwi",
+      "mowisz": "Myślała, że ma za rzadkie brwi. Zobacz, co było pod spodem.",
+      "wizual": "makro: szczoteczka podnosi rzadkie włoski, mignięcie efektu po",
+      "oceny": { "zatrzymanie": 9, "ciekawosc": 8, "konkret": 8, "to_o_mnie": 8, "spojnosc": 9, "autentycznosc": 8 },
+      "dlaczego": "Historia konkretnej osoby, w której widz rozpoznaje siebie, luka „co było pod spodem”, obraz i zdanie mówią to samo, ale się nie dublują."
+    },
+    {
+      "poziom": "mocny",
+      "tekst": "Tak, to są *igły*.",
+      "mowisz": "Tak, to są igły. I tak, na twarz.",
+      "wizual": "makro dermapenu dotykającego skóry, prowadząca unosi dermapen do obiektywu",
+      "oceny": { "zatrzymanie": 9, "ciekawosc": 8, "konkret": 7, "to_o_mnie": 7, "spojnosc": 9, "autentycznosc": 9 },
+      "dlaczego": "Odpowiada na reakcję widza, zanim ten ją wypowie: szok, humor i pewność siebie w 6 słowach, obraz pokazuje dokładnie to, o czym mowa."
+    }
+  ]
+}

@@ -1,0 +1,208 @@
+<!doctype html>
+<!--
+  cena-oferta: plansza z ceną zabiegu albo promocją (styl marki: perła, złoto, granat).
+  Zmienne: zabieg, cena (np. "180 zł"), cena_stara (pusta = brak przekreślenia),
+           rabat (np. "-15%", pusty = brak; prawie czarny granat), etykieta (mały napis nad zabiegiem),
+           dopisek (np. "1-31 grudnia|Idziecie we dwie?", | = nowa linia), tlo plansza | karta,
+           licznik (cena i rabat szybko odliczają od zera),
+           wejscie zwykle | klik (karta wchodzi zamknięta z pytaniem, kursor myszki klika, karta rozwija się i pokazuje cenę),
+           pytanie (napis na zamkniętej karcie przy wejściu klik),
+           tlo_karty biala | zlota (złota karta: ciemna cena zamiast złotej, żeby była czytelna).
+  Bez obietnic efektu w dopisku. Cena to informacja, nie krzyk. Ruch spokojny: fade, delikatny slide, rysowane linie.
+-->
+<html
+  lang="pl"
+  data-composition-id="cena-oferta"
+  data-composition-duration="3.5"
+  data-composition-variables='[
+    {"id":"zabieg","type":"string","label":"Zabieg","default":"Laminacja brwi z koloryzacją"},
+    {"id":"cena","type":"string","label":"Cena","default":"180 zł"},
+    {"id":"cena_stara","type":"string","label":"Stara cena","default":""},
+    {"id":"rabat","type":"string","label":"Rabat (np. -15%)","default":""},
+    {"id":"etykieta","type":"string","label":"Etykieta","default":"cennik"},
+    {"id":"dopisek","type":"string","label":"Dopisek (| = nowa linia)","default":"czas: ok. 60 min"},
+    {"id":"tlo","type":"enum","label":"Tło","default":"plansza","options":[{"value":"plansza","label":"Plansza"},{"value":"karta","label":"Karta na nagraniu"}]},
+    {"id":"licznik","type":"boolean","label":"Odliczanie ceny od zera","default":true},
+    {"id":"wejscie","type":"enum","label":"Wejście","default":"zwykle","options":[{"value":"zwykle","label":"Zwykłe"},{"value":"klik","label":"Klik myszką i rozwinięcie"}]},
+    {"id":"pytanie","type":"string","label":"Pytanie na zamkniętej karcie","default":"ile kosztuje?"},
+    {"id":"tlo_karty","type":"enum","label":"Tło karty","default":"biala","options":[{"value":"biala","label":"Białe"},{"value":"zlota","label":"Złote"}]}
+  ]'
+>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Cena i oferta</title>
+  </head>
+  <body>
+    <template>
+      <div id="root" data-composition-id="cena-oferta" data-duration="3.5" data-fps="30">
+        <style>
+          #root { position: absolute; inset: 0; overflow: hidden; font-family: var(--font-tekst, "Montserrat"), sans-serif; color: var(--tekst, #082032); }
+          .co-clip { position: absolute; inset: 0; }
+          .co-bg { position: absolute; inset: 0; background: linear-gradient(172deg, var(--tlo-jasne, #f9f5f3) 0%, var(--bialy, #fff) 45%, var(--nude, #f0e2db) 100%); }
+          .co-bg.ukryte { display: none; }
+          .co-plama { position: absolute; border-radius: 46% 54% 60% 40% / 52% 44% 56% 48%; background: radial-gradient(closest-side, color-mix(in srgb, var(--akwarela, #a9bccb) 55%, transparent), transparent); filter: blur(28px); }
+          .co-plama.p1 { left: -160px; top: 200px; width: 620px; height: 520px; }
+          .co-plama.p2 { right: -180px; top: 1260px; width: 680px; height: 560px; opacity: 0.8; }
+          .co-rog { position: absolute; width: 330px; height: 330px; overflow: visible; }
+          .co-rog path { fill: none; stroke-linecap: round; }
+          .co-rog .l1 { stroke: var(--akcent, #c8a15f); stroke-width: 3; }
+          .co-rog .l2 { stroke: var(--zloto-jasne, #d7bd89); stroke-width: 2; }
+          .co-rog.r1 { right: 0; top: 0; }
+          .co-rog.r2 { left: 0; bottom: 0; transform: rotate(180deg); }
+          .co-card {
+            position: absolute;
+            left: var(--safe-left, 60px);
+            right: var(--safe-right, 140px);
+            top: 520px;
+            padding: 64px 40px 66px;
+            border-radius: 40px;
+            background: rgba(255, 255, 255, 0.94);
+            box-shadow: 0 24px 70px rgba(8, 32, 50, 0.1), inset 0 0 0 2px color-mix(in srgb, var(--akcent, #c8a15f) 45%, transparent);
+            text-align: center;
+          }
+          .co-card.zlota { background: linear-gradient(160deg, var(--zloto-jasne, #d7bd89) 0%, var(--akcent, #c8a15f) 100%); box-shadow: 0 24px 70px rgba(8, 32, 50, 0.16), inset 0 0 0 2px rgba(255, 255, 255, 0.45); }
+          .co-card.zlota .co-label, .co-card.zlota .co-pyt, .co-card.zlota .co-dop div:first-child, .co-card.zlota .co-stara { color: var(--tekst, #082032); opacity: 0.78; }
+          .co-card.zlota .co-cena, .co-card.zlota .co-pyt b { color: var(--tekst, #082032); }
+          .co-card.zlota .co-rule { background: var(--bialy, #fff); }
+          .co-label { font-size: 26px; font-weight: 600; letter-spacing: 0.3em; text-transform: uppercase; color: var(--tekst-2, #6a7a8b); }
+          .co-zabieg { margin-top: 20px; font-family: var(--font-naglowki, "Playfair Display"), serif; font-size: 66px; font-weight: 600; line-height: 1.12; color: var(--tekst, #082032); }
+          .co-rule { width: 130px; height: 3px; margin: 30px auto 0; border-radius: 2px; background: var(--akcent, #c8a15f); transform-origin: 50% 50%; }
+          .co-rabat { display: inline-block; margin-top: 34px; padding: 12px 34px 14px; border-radius: 999px; background: var(--mocny, #070c0e); color: var(--bialy, #fff); font-size: 44px; font-weight: 700; letter-spacing: 0.06em; }
+          .co-rabat.ukryte { display: none; }
+          .co-ceny { margin-top: 30px; display: flex; justify-content: center; align-items: baseline; gap: 34px; }
+          .co-stara-w { position: relative; display: inline-block; }
+          .co-stara-w.ukryte { display: none; }
+          .co-stara { font-size: 52px; font-weight: 500; color: var(--tekst-2, #6a7a8b); }
+          .co-krw { position: absolute; left: -6px; right: -6px; top: 52%; height: 4px; border-radius: 2px; background: var(--akcent-2, #b47946); transform-origin: 0 50%; }
+          .co-cena { font-family: var(--font-naglowki, "Playfair Display"), serif; font-style: italic; font-size: 138px; font-weight: 600; color: var(--akcent, #c8a15f); line-height: 1; font-variant-numeric: tabular-nums; }
+          .co-dop { margin-top: 36px; display: flex; flex-direction: column; gap: 14px; align-items: center; }
+          .co-dop div:first-child { font-size: 30px; font-weight: 600; letter-spacing: 0.24em; text-transform: uppercase; color: var(--tekst-2, #6a7a8b); }
+          .co-pyt { margin-top: 16px; font-size: 30px; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; color: var(--tekst-2, #6a7a8b); overflow: hidden; }
+          .co-pyt b { display: inline-block; margin-left: 10px; color: var(--akcent, #c8a15f); }
+          .co-pyt.ukryte { display: none; }
+          .co-dol { overflow: hidden; }
+          .co-kursor-w { position: absolute; left: 0; top: 0; opacity: 0; }
+          .co-kursor { position: absolute; left: 0; top: 0; width: 74px; height: 92px; transform-origin: 8px 6px; filter: drop-shadow(0 6px 10px rgba(8, 32, 50, 0.35)); }
+          .co-fala { position: absolute; left: -45px; top: -45px; width: 90px; height: 90px; border-radius: 50%; border: 5px solid var(--akcent, #c8a15f); opacity: 0; }
+          .co-dop div + div { font-family: var(--font-naglowki, "Playfair Display"), serif; font-style: italic; font-size: 44px; color: var(--tekst, #082032); }
+        </style>
+        <div id="cena-oferta-clip" class="clip co-clip" data-start="0" data-duration="3.5" data-track-index="0">
+          <div id="cena-oferta-bg" class="co-bg">
+            <div id="cena-oferta-p1" class="co-plama p1"></div>
+            <div id="cena-oferta-p2" class="co-plama p2"></div>
+            <svg class="co-rog r1" viewBox="0 0 330 330"><path id="cena-oferta-r1a" class="l1" d="M 50 0 A 280 280 0 0 0 330 280" /><path id="cena-oferta-r1b" class="l2" d="M 120 0 A 210 210 0 0 0 330 210" /></svg>
+            <svg class="co-rog r2" viewBox="0 0 330 330"><path id="cena-oferta-r2a" class="l1" d="M 50 0 A 280 280 0 0 0 330 280" /><path id="cena-oferta-r2b" class="l2" d="M 120 0 A 210 210 0 0 0 330 210" /></svg>
+          </div>
+          <div id="cena-oferta-card" class="co-card">
+            <div id="cena-oferta-label" class="co-label"></div>
+            <div id="cena-oferta-zabieg" class="co-zabieg"></div>
+            <div id="cena-oferta-pyt" class="co-pyt ukryte"><span id="cena-oferta-pyt-t"></span><b id="cena-oferta-strz">▾</b></div>
+            <div id="cena-oferta-dol" class="co-dol">
+            <div id="cena-oferta-rule" class="co-rule"></div>
+            <div id="cena-oferta-rabat" class="co-rabat"></div>
+            <div class="co-ceny"><span id="cena-oferta-stara-w" class="co-stara-w"><span id="cena-oferta-stara" class="co-stara"></span><span id="cena-oferta-krw" class="co-krw"></span></span><span id="cena-oferta-cena" class="co-cena"></span></div>
+            <div id="cena-oferta-dop" class="co-dop"></div>
+            </div>
+          </div>
+          <div id="cena-oferta-mysz" class="co-kursor-w">
+            <div id="cena-oferta-fala" class="co-fala"></div>
+            <svg id="cena-oferta-kursor" class="co-kursor" viewBox="0 0 24 30"><path d="M2 1.5 L2 24 L8 18.6 L12 28 L16 26.3 L12 17 L20 17 Z" fill="#fff" stroke="#082032" stroke-width="1.6" stroke-linejoin="round" /></svg>
+          </div>
+        </div>
+        <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+        <script>
+          (function () {
+            var ID = "cena-oferta";
+            var $ = function (s) { return document.getElementById(ID + "-" + s); };
+            var D = parseFloat($("clip").getAttribute("data-duration")) || 3.5;
+            var v = window.__hyperframes && window.__hyperframes.getVariables ? window.__hyperframes.getVariables() : {};
+            var cena = v.cena == null ? "180 zł" : String(v.cena);
+            var rabat = v.rabat ? String(v.rabat) : "";
+            var licznik = !(v.licznik === false || v.licznik === "false");
+            $("label").textContent = v.etykieta == null ? "cennik" : String(v.etykieta);
+            $("zabieg").textContent = v.zabieg == null ? "Laminacja brwi z koloryzacją" : String(v.zabieg);
+            $("cena").textContent = cena;
+            $("stara").textContent = v.cena_stara ? String(v.cena_stara) : "";
+            if (!v.cena_stara) $("stara-w").classList.add("ukryte");
+            $("rabat").textContent = rabat;
+            if (!rabat) $("rabat").classList.add("ukryte");
+            var dop = v.dopisek == null ? "czas: ok. 60 min" : String(v.dopisek);
+            dop.split("|").map(function (s) { return s.trim(); }).filter(Boolean).forEach(function (s) {
+              var d = document.createElement("div");
+              d.textContent = s;
+              $("dop").appendChild(d);
+            });
+            if (v.tlo === "karta") $("bg").classList.add("ukryte");
+            if (v.tlo_karty === "zlota") $("card").classList.add("zlota");
+            var klik = v.wejscie === "klik";
+            $("pyt-t").textContent = v.pytanie == null ? "ile kosztuje?" : String(v.pytanie);
+            if (klik) $("pyt").classList.remove("ukryte");
+
+            var RUCH = (function () { var cs = getComputedStyle(document.documentElement), g = function (n, d) { var v = (cs.getPropertyValue(n) || "").trim().replace(/^["']|["']$/g, ""); return v || d; }; return { we: g("--ruch-wejscie", "power2.out"), wy: g("--ruch-wyjscie", "power2.in"), ak: g("--ruch-akcent", "back.out(2)"), pl: g("--ruch-plynny", "power2.inOut") }; })(); // styl ruchu marki (zloz: --ruch-*)
+            var tl = gsap.timeline({ paused: true });
+            // Licznik: pierwsza liczba w tekście szybko rośnie od zera (format jak w oryginale: przecinek, kropka).
+            function odlicz(el, tekst, t0, czas) {
+              var m = tekst.match(/\d+(?:[.,]\d+)?/);
+              if (!m || !licznik) return;
+              var cel = Number(m[0].replace(",", ".")), miejsca = (m[0].split(/[.,]/)[1] || "").length;
+              var stan = { x: 0 };
+              var rysuj = function () { el.textContent = tekst.replace(m[0], stan.x.toFixed(miejsca).replace(".", m[0].indexOf(",") >= 0 ? "," : ".")); };
+              rysuj();
+              tl.fromTo(stan, { x: 0 }, { x: cel, duration: czas, ease: RUCH.we, onUpdate: rysuj }, t0);
+            }
+            var TC = Math.min(1.0, Math.max(0.5, D * 0.3));
+            if (v.tlo !== "karta") {
+              tl.fromTo($("bg"), { opacity: 0 }, { opacity: 1, duration: 0.3, ease: RUCH.we }, 0);
+              tl.fromTo([$("p1"), $("p2")], { opacity: 0, scale: 0.92 }, { opacity: 1, scale: 1, duration: 1.2, ease: RUCH.we }, 0);
+              tl.fromTo($("p1"), { x: 0, y: 0 }, { x: 24, y: 18, duration: D, ease: "none", immediateRender: false }, 0);
+              tl.fromTo($("p2"), { x: 0, y: 0 }, { x: -20, y: -16, duration: D, ease: "none", immediateRender: false }, 0);
+              ["r1a", "r1b", "r2a", "r2b"].forEach(function (k, i) {
+                tl.fromTo($(k), { strokeDasharray: 520, strokeDashoffset: 520 }, { strokeDashoffset: 0, duration: 0.9, ease: RUCH.pl }, 0.1 + (i % 2) * 0.12 + (i > 1 ? 0.15 : 0));
+              });
+            }
+            // Wejście klik: o O przesuwa się cała reszta animacji (zloz bierze te same czasy do dźwięków).
+            var T_KLIK = 0.95, O = klik ? 0.85 : 0;
+            if (klik) {
+              // Zamknięta karta wpada z odbiciem, strzałka podskakuje, kursor wjeżdża i klika w pytanie.
+              $("dol").style.height = "0px";
+              tl.fromTo($("card"), { opacity: 0, y: 60, scale: 0.88 }, { opacity: 1, y: 0, scale: 1, duration: 0.45, ease: RUCH.ak }, 0.05);
+              tl.fromTo($("strz"), { y: -4 }, { y: 4, duration: 0.2, yoyo: true, repeat: 3, ease: RUCH.pl }, 0.3);
+              var cx = 560, cy = 742;
+              tl.fromTo($("mysz"), { x: 880, y: 1500, opacity: 0 }, { x: cx, y: cy, opacity: 1, duration: 0.5, ease: RUCH.we }, 0.4);
+              tl.to($("kursor"), { scale: 0.82, duration: 0.07, yoyo: true, repeat: 1, ease: RUCH.pl }, T_KLIK);
+              tl.fromTo($("fala"), { scale: 0.3, opacity: 0.9 }, { scale: 1.6, opacity: 0, duration: 0.45, ease: RUCH.we }, T_KLIK);
+              tl.to($("card"), { scale: 0.96, duration: 0.07, yoyo: true, repeat: 1, ease: RUCH.pl }, T_KLIK);
+              // Karta się rozwija: pytanie znika, dolna część rośnie do pełnej wysokości.
+              tl.to($("pyt"), { opacity: 0, duration: 0.1, ease: RUCH.wy }, T_KLIK + 0.02);
+              tl.set($("pyt"), { display: "none" }, T_KLIK + 0.12);
+              tl.to($("dol"), { height: "auto", duration: 0.5, ease: RUCH.we }, T_KLIK + 0.12);
+              tl.to($("mysz"), { x: 820, y: 1480, opacity: 0, duration: 0.45, ease: RUCH.wy }, T_KLIK + 0.4);
+            } else {
+              tl.fromTo($("card"), { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.5, ease: RUCH.we }, 0.05);
+            }
+            tl.fromTo($("rule"), { scaleX: 0 }, { scaleX: 1, duration: 0.45, ease: RUCH.pl }, 0.35 + O);
+            if (rabat) {
+              tl.fromTo($("rabat"), { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.35, ease: RUCH.we }, 0.4 + O);
+              odlicz($("rabat"), rabat, 0.45 + O, Math.min(0.8, TC));
+            }
+            if (v.cena_stara) {
+              tl.fromTo($("stara-w"), { opacity: 0 }, { opacity: 1, duration: 0.3 }, 0.45 + O);
+              tl.fromTo($("krw"), { scaleX: 0 }, { scaleX: 1, duration: 0.35, ease: RUCH.pl }, 0.7 + O);
+              tl.to($("stara"), { opacity: 0.55, duration: 0.3 }, 0.9 + O);
+            }
+            tl.fromTo($("cena"), { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.35, ease: RUCH.we }, 0.75 + O);
+            odlicz($("cena"), cena, 0.75 + O, TC);
+            // Na końcu odliczania delikatne „oddechnięcie” ceny, bez skakania.
+            tl.fromTo($("cena"), { scale: 1 }, { scale: 1.05, duration: 0.22, yoyo: true, repeat: 1, ease: RUCH.pl }, 0.75 + O + TC);
+            var dopy = $("dop").children;
+            if (dopy.length) tl.fromTo(dopy, { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.4, ease: RUCH.we, stagger: 0.25 }, Math.min(D - 0.9, 0.95 + O + TC * 0.5));
+            tl.to($("card"), { opacity: 0, y: -20, duration: 0.28, ease: RUCH.wy }, Math.max(1.4 + O, D - 0.3));
+            tl.set({}, {}, D);
+            window.__timelines = window.__timelines || {};
+            window.__timelines[ID] = tl;
+          })();
+        </script>
+      </div>
+    </template>
+  </body>
+</html>

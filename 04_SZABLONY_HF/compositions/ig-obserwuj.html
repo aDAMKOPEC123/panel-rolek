@@ -1,0 +1,90 @@
+<!doctype html>
+<!--
+  ig-obserwuj: karta "Obserwuj" z kliknięciem przycisku. Przestylowany blok z katalogu
+  HyperFrames: instagram-follow (npx hyperframes add instagram-follow). Zmiany: polskie
+  teksty, kolory marki zamiast ciemnej karty, karta przeniesiona nad strefę przycisków IG
+  (oryginał siedział 160 px od dołu, czyli pod UI Instagrama), zmienne, avatar ze slotu.
+  Zmienne: nazwa, handle, opis (np. "brwi · rzęsy · stopy"). Slot media: avatar.
+-->
+<html
+  lang="pl"
+  data-composition-id="ig-obserwuj"
+  data-composition-duration="3.5"
+  data-composition-variables='[
+    {"id":"nazwa","type":"string","label":"Nazwa","default":"Twój Gabinet"},
+    {"id":"handle","type":"string","label":"Handle","default":"@twoj_gabinet"},
+    {"id":"opis","type":"string","label":"Opis","default":"brwi · rzęsy · twarz · stopy"}
+  ]'
+>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Obserwuj na IG</title>
+  </head>
+  <body>
+    <template>
+      <div id="root" data-composition-id="ig-obserwuj" data-duration="3.5" data-fps="30">
+        <style>
+          #root { position: absolute; inset: 0; pointer-events: none; font-family: var(--font-tekst, "Montserrat"), sans-serif; }
+          .igo-clip { position: absolute; inset: 0; }
+          .igo-row { position: absolute; left: var(--safe-left, 60px); right: var(--safe-right, 140px); top: 1300px; display: flex; justify-content: center; }
+          .igo-card {
+            display: flex;
+            align-items: center;
+            gap: 24px;
+            background: var(--bialy, #fff);
+            border-radius: 70px;
+            padding: 22px 26px 22px 22px;
+            box-shadow: 0 14px 44px rgba(43, 35, 33, 0.22);
+          }
+          .igo-av { width: 112px; height: 112px; border-radius: 50%; object-fit: cover; flex-shrink: 0; border: 4px solid var(--akcent, #b07a6e); }
+          .igo-info { display: flex; flex-direction: column; gap: 2px; }
+          .igo-name { font-size: 36px; font-weight: 700; color: var(--tekst, #2b2321); line-height: 1.2; white-space: nowrap; }
+          .igo-handle { font-size: 26px; color: var(--akcent-2, #8c6b5d); white-space: nowrap; }
+          .igo-opis { font-size: 22px; color: #a08f86; white-space: nowrap; }
+          .igo-btn { position: relative; width: 210px; height: 76px; border-radius: 38px; background: var(--akcent, #b07a6e); flex-shrink: 0; overflow: hidden; }
+          .igo-t { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 28px; font-weight: 700; color: var(--bialy, #fff); white-space: nowrap; }
+          .igo-t2 { opacity: 0; color: var(--tekst, #2b2321); }
+        </style>
+        <div id="ig-obserwuj-clip" class="clip igo-clip" data-start="0" data-duration="3.5" data-track-index="0">
+          <div class="igo-row">
+            <div id="ig-obserwuj-card" class="igo-card">
+              <img class="igo-av" data-slot-media="avatar" src="assets/demo/avatar.jpg" alt="" />
+              <div class="igo-info">
+                <div id="ig-obserwuj-name" class="igo-name"></div>
+                <div id="ig-obserwuj-handle" class="igo-handle"></div>
+                <div id="ig-obserwuj-opis" class="igo-opis"></div>
+              </div>
+              <div id="ig-obserwuj-btn" class="igo-btn">
+                <span id="ig-obserwuj-t1" class="igo-t">Obserwuj</span>
+                <span id="ig-obserwuj-t2" class="igo-t igo-t2">Obserwujesz</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+        <script>
+          (function () {
+            var ID = "ig-obserwuj";
+            var $ = function (s) { return document.getElementById(ID + "-" + s); };
+            var D = parseFloat($("clip").getAttribute("data-duration")) || 3.5;
+            var v = window.__hyperframes && window.__hyperframes.getVariables ? window.__hyperframes.getVariables() : {};
+            $("name").textContent = v.nazwa == null ? "Twój Gabinet" : String(v.nazwa);
+            $("handle").textContent = v.handle == null ? "@twoj_gabinet" : String(v.handle);
+            $("opis").textContent = v.opis == null ? "brwi · rzęsy · twarz · stopy" : String(v.opis);
+            var RUCH = (function () { var cs = getComputedStyle(document.documentElement), g = function (n, d) { var v = (cs.getPropertyValue(n) || "").trim().replace(/^["']|["']$/g, ""); return v || d; }; return { we: g("--ruch-wejscie", "power2.out"), wy: g("--ruch-wyjscie", "power2.in"), ak: g("--ruch-akcent", "back.out(2)"), pl: g("--ruch-plynny", "power2.inOut") }; })(); // styl ruchu marki (zloz: --ruch-*)
+            var tl = gsap.timeline({ paused: true });
+            tl.fromTo($("card"), { y: 120, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, ease: RUCH.we }, 0.1);
+            tl.to($("btn"), { scale: 0.92, duration: 0.15, ease: RUCH.we }, 1.0);
+            tl.to($("btn"), { scale: 1, duration: 0.4, ease: RUCH.ak }, 1.15);
+            tl.to($("btn"), { backgroundColor: "#efe6e0", duration: 0.12, ease: "none" }, 1.15);
+            tl.to($("t1"), { opacity: 0, duration: 0.08 }, 1.15);
+            tl.to($("t2"), { opacity: 1, duration: 0.08 }, 1.18);
+            tl.to($("card"), { y: 80, opacity: 0, duration: 0.25, ease: RUCH.wy }, Math.max(1.8, D - 0.3));
+            window.__timelines = window.__timelines || {};
+            window.__timelines[ID] = tl;
+          })();
+        </script>
+      </div>
+    </template>
+  </body>
+</html>

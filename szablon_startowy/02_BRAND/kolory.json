@@ -1,0 +1,40 @@
+{
+  "_opis": "Role kolorów marki. Wartości hex trzymamy w JEDNYM miejscu: config.json -> kolory. Tu jest tylko opis, do czego który kolor służy. Zmieniasz kolor? Zmień go w config.json i przebuduj kompozycję (npm run zloz).",
+  "_marka": "Opis Twojej marki: jak ma wyglądać (np. jasno, czysto, premium; akcent do słów kluczowych, ciemny tekst).",
+  "akcent": {
+    "uzycie": "słowa kluczowe (szeryf kursywą), liczby, cena, cienkie linie, kreska pod nagłówkiem, ozdobniki w rogach"
+  },
+  "akcent_2": {
+    "uzycie": "ramki, etykiety przed/po"
+  },
+  "tekst": {
+    "uzycie": "nagłówki i napisy (szeryf)"
+  },
+  "tlo_jasne": {
+    "uzycie": "tło plansz, boks napisów"
+  },
+  "nude": {
+    "uzycie": "tło akcentowe, gradienty plansz"
+  },
+  "bialy": {
+    "uzycie": "boksy napisów, karty, tekst na przycisku CTA"
+  },
+  "granat": {
+    "uzycie": "logo, drobne akcenty"
+  },
+  "tekst_2": {
+    "uzycie": "podpisy, dopiski, handle (bezszeryf, WERSALIKI, szeroki odstęp)"
+  },
+  "zloto_jasne": {
+    "uzycie": "drugie linie ozdobników, poświata"
+  },
+  "cta": {
+    "uzycie": "pigułka CTA ze strzałką → i białym tekstem"
+  },
+  "mocny": {
+    "uzycie": "mocne akcenty, -15%, promocje"
+  },
+  "akwarela": {
+    "uzycie": "błękitno-szare akwarelowe plamy w tle plansz"
+  }
+}

@@ -1,0 +1,181 @@
+<!doctype html>
+<!--
+  moj-zlota-brew: złota linia rysuje łuk brwi od nasady do końcówki (Trim Paths + świecąca końcówka pióra),
+  przy końcówce błyska kilka iskier (hash, bez losowości), pod spodem pojawia się elegancki napis
+  z rozmyciem ostrości i przesuwającym się połyskiem.
+  Zmienne: tekst (*słowo* = akcent, | = nowa linia), x, y (środek brwi w px kadru 1080x1920),
+  szerokosc (długość łuku), luk (wysokość łuku), kierunek (skąd rysować), rozmiar (px liter).
+-->
+<html
+  lang="pl"
+  data-composition-id="moj-zlota-brew"
+  data-composition-duration="3.5"
+  data-composition-variables='[
+    {"id":"tekst","type":"string","label":"Napis pod brwią","default":"efekt *po laminacji*"},
+    {"id":"x","type":"number","label":"Środek brwi X (px, 0-1080)","default":520,"min":0,"max":1080,"step":5},
+    {"id":"y","type":"number","label":"Środek brwi Y (px, 0-1920)","default":760,"min":0,"max":1920,"step":5},
+    {"id":"szerokosc","type":"number","label":"Długość łuku (px)","default":560,"min":200,"max":900,"step":10},
+    {"id":"luk","type":"number","label":"Wysokość łuku (px)","default":110,"min":20,"max":260,"step":5},
+    {"id":"kierunek","type":"enum","label":"Kierunek rysowania","default":"lewo-prawo","options":[{"value":"lewo-prawo","label":"Nasada po lewej, końcówka po prawej"},{"value":"prawo-lewo","label":"Nasada po prawej, końcówka po lewej"}]},
+    {"id":"rozmiar","type":"number","label":"Rozmiar napisu (px)","default":88,"min":44,"max":140,"step":2}
+  ]'
+>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Złota brew</title>
+  </head>
+  <body>
+    <template>
+      <div id="root" data-composition-id="moj-zlota-brew" data-duration="3.5" data-fps="30">
+        <style>
+          #root { position: absolute; inset: 0; pointer-events: none; overflow: hidden; font-family: var(--font-naglowki, "Playfair Display"), serif; }
+          .zb-clip { position: absolute; inset: 0; }
+          .zb-svg { position: absolute; left: 0; top: 0; width: 1080px; height: 1920px; overflow: visible; }
+          .zb-svg path { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+          .zb-stop1 { stop-color: var(--zloto-jasne, #D7BD89); }
+          .zb-stop2 { stop-color: var(--akcent, #C8A15F); }
+          .zb-stop3 { stop-color: var(--bialy, #ffffff); }
+          .zb-warstwa { position: absolute; inset: 0; }
+          .zb-pioro { position: absolute; left: 0; top: 0; width: 34px; height: 34px; margin: -17px 0 0 -17px; border-radius: 50%; background: radial-gradient(circle, #fff 0 22%, rgba(255, 236, 196, 0.9) 38%, transparent 70%); }
+          .zb-iskra { position: absolute; left: 0; top: 0; border-radius: 50%; background: radial-gradient(circle, #fff 0 20%, var(--zloto-jasne, #D7BD89) 46%, transparent 72%); }
+          .zb-gwiazda { position: absolute; left: 0; top: 0; width: 52px; height: 52px; margin: -26px 0 0 -26px; }
+          .zb-gwiazda svg { width: 100%; height: 100%; display: block; }
+          .zb-txt { position: absolute; left: var(--safe-left, 60px); right: var(--safe-right, 140px); display: flex; justify-content: center; text-align: center; }
+          .zb-t { font-weight: 500; line-height: 1.12; letter-spacing: 0.01em; color: var(--bialy, #fff); text-shadow: 0 4px 20px rgba(0, 0, 0, 0.4); }
+          .zb-t em { font-style: italic; font-weight: 600; background-image: linear-gradient(100deg, var(--akcent-2, #B47946) 0%, var(--akcent, #C8A15F) 38%, #fff6df 50%, var(--akcent, #C8A15F) 62%, var(--akcent-2, #B47946) 100%); background-size: 300% 100%; background-position: 100% 50%; -webkit-background-clip: text; background-clip: text; color: transparent; text-shadow: none; filter: drop-shadow(0 1px 1px rgba(60, 30, 10, 0.55)) drop-shadow(0 4px 12px rgba(0, 0, 0, 0.35)); }
+          .zb-kreska { width: 300px; height: 2px; margin: 18px auto 0; background: linear-gradient(90deg, transparent, var(--zloto-jasne, #D7BD89), transparent); }
+        </style>
+        <div id="moj-zlota-brew-clip" class="clip zb-clip" data-start="0" data-duration="3.5" data-track-index="0">
+          <svg id="moj-zlota-brew-svg" class="zb-svg" viewBox="0 0 1080 1920">
+            <defs>
+              <linearGradient id="moj-zlota-brew-grad" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="1080" y2="0">
+                <stop id="moj-zlota-brew-s1" offset="0" class="zb-stop2" />
+                <stop id="moj-zlota-brew-s2" offset="0.6" class="zb-stop1" />
+                <stop id="moj-zlota-brew-s3" offset="1" class="zb-stop2" />
+              </linearGradient>
+              <filter id="moj-zlota-brew-blask" x="-20%" y="-50%" width="140%" height="200%"><feGaussianBlur stdDeviation="7" /></filter>
+            </defs>
+            <path id="moj-zlota-brew-poswiata" />
+            <path id="moj-zlota-brew-linia" />
+            <path id="moj-zlota-brew-polysk" />
+          </svg>
+          <div id="moj-zlota-brew-iskry" class="zb-warstwa"></div>
+          <div id="moj-zlota-brew-pioro" class="zb-pioro"></div>
+          <div id="moj-zlota-brew-txt" class="zb-txt"><div><div id="moj-zlota-brew-t" class="zb-t"></div><div id="moj-zlota-brew-kreska" class="zb-kreska"></div></div></div>
+        </div>
+        <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+        <script>
+          (function () {
+            var ID = "moj-zlota-brew";
+            var $ = function (s) { return document.getElementById(ID + "-" + s); };
+            var clip = $("clip");
+            var D = parseFloat(clip.getAttribute("data-duration")) || 3.5;
+            var v = window.__hyperframes && window.__hyperframes.getVariables ? window.__hyperframes.getVariables() : {};
+            var num = function (val, def) { return val != null && val !== "" && !isNaN(Number(val)) ? Number(val) : def; };
+            var tekst = v.tekst == null ? "efekt *po laminacji*" : String(v.tekst);
+            var X = num(v.x, 520), Y = num(v.y, 760);
+            var W = num(v.szerokosc, 560), H = num(v.luk, 110);
+            var rozmiar = num(v.rozmiar, 88);
+            var kier = v.kierunek === "prawo-lewo" ? -1 : 1;
+            var prand = function (n) { var s = Math.sin(n * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); };
+            var esc = function (s) { return s.replace(/[&<>]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]; }); };
+            var htmlTekstu = function (t) {
+              return t.split("|").map(function (l) { return esc(l.trim()).replace(/\*([^*]+)\*/g, "<em>$1</em>"); }).join("<br>");
+            };
+
+            // Łuk brwi: nasada niżej i grubsza, szczyt łuku na ok. 2/3 długości, końcówka opada i zwęża się
+            var px = function (u) { return X + kier * (u - 0.5) * W; };
+            var nas = [px(0), Y + H * 0.32], szc = [px(0.66), Y - H * 0.62], kon = [px(1), Y + H * 0.38];
+            var d = "M " + nas[0].toFixed(1) + " " + nas[1].toFixed(1) +
+              " C " + px(0.2).toFixed(1) + " " + (Y - H * 0.18).toFixed(1) + ", " + px(0.45).toFixed(1) + " " + (Y - H * 0.66).toFixed(1) + ", " + szc[0].toFixed(1) + " " + szc[1].toFixed(1) +
+              " C " + px(0.8).toFixed(1) + " " + (Y - H * 0.6).toFixed(1) + ", " + px(0.92).toFixed(1) + " " + (Y - H * 0.1).toFixed(1) + ", " + kon[0].toFixed(1) + " " + kon[1].toFixed(1);
+            var grad = $("grad");
+            grad.setAttribute("x1", px(0)); grad.setAttribute("x2", px(1));
+            var linia = $("linia"), polysk = $("polysk"), poswiata = $("poswiata");
+            [poswiata, linia, polysk].forEach(function (p) { p.setAttribute("d", d); });
+            linia.setAttribute("stroke", "url(#" + ID + "-grad)"); linia.setAttribute("stroke-width", 9);
+            linia.style.filter = "drop-shadow(0 3px 7px rgba(0,0,0,0.35))";
+            poswiata.setAttribute("stroke", "url(#" + ID + "-grad)"); poswiata.setAttribute("stroke-width", 22);
+            poswiata.setAttribute("filter", "url(#" + ID + "-blask)"); poswiata.style.opacity = 0.55;
+            polysk.setAttribute("stroke", "#fffaf0"); polysk.setAttribute("stroke-width", 3);
+            var L = linia.getTotalLength ? linia.getTotalLength() : W * 1.2;
+            // wszystkie punkty łuku policzone raz (pióro tylko czyta tablicę)
+            var PT = [], NP = 120;
+            for (var i = 0; i <= NP; i++) { var p = linia.getPointAtLength(L * i / NP); PT.push([p.x, p.y]); }
+            var punkt = function (u) { var f = Math.max(0, Math.min(1, u)) * NP, a = Math.floor(f), b = Math.min(NP, a + 1), r = f - a; return [PT[a][0] + (PT[b][0] - PT[a][0]) * r, PT[a][1] + (PT[b][1] - PT[a][1]) * r]; };
+
+            var RUCH = (function () { var cs = getComputedStyle(document.documentElement), g = function (n, d) { var v = (cs.getPropertyValue(n) || "").trim().replace(/^["']|["']$/g, ""); return v || d; }; return { we: g("--ruch-wejscie", "power2.out"), wy: g("--ruch-wyjscie", "power2.in"), ak: g("--ruch-akcent", "back.out(2)"), pl: g("--ruch-plynny", "power2.inOut") }; })(); // styl ruchu marki (zloz: --ruch-*)
+            var tl = gsap.timeline({ paused: true });
+            var T0 = 0.1, RYS = 1.15, KONIEC = T0 + RYS, out = Math.max(1.6, D - 0.42);
+
+            // 1. Rysowanie łuku (Trim Paths) + poświata + świecące pióro na czubku
+            tl.fromTo([linia, poswiata], { strokeDasharray: L, strokeDashoffset: L }, { strokeDashoffset: 0, duration: RYS, ease: RUCH.pl }, T0);
+            var pioro = $("pioro"), st = { u: 0 };
+            var ustawPioro = function () { var q = punkt(st.u); pioro.style.transform = "translate(" + q[0].toFixed(1) + "px," + q[1].toFixed(1) + "px)"; };
+            ustawPioro();
+            tl.fromTo(pioro, { opacity: 0, scale: 0.4 }, { opacity: 1, scale: 1, duration: 0.2, ease: RUCH.we }, T0);
+            tl.to(st, { u: 1, duration: RYS, ease: RUCH.pl, onUpdate: ustawPioro }, T0);
+            tl.to(pioro, { scale: 2.2, opacity: 0, duration: 0.35, ease: RUCH.we }, KONIEC);
+            // cienki połysk przebiega po gotowej linii
+            tl.fromTo(polysk, { strokeDasharray: "70 " + L, strokeDashoffset: 70, opacity: 0 }, { strokeDashoffset: -L, opacity: 0.85, duration: 0.9, ease: RUCH.pl }, KONIEC + 0.05);
+            tl.to(polysk, { opacity: 0, duration: 0.2, ease: RUCH.wy }, KONIEC + 0.75);
+
+            // 2. Iskry przy końcówce: kilka gwiazdek + drobny pył (hash zamiast losowości)
+            var box = $("iskry"), GW = 6, PYL = 14;
+            var gwSvg = '<svg viewBox="0 0 40 40"><path d="M20 0 C21 14 26 19 40 20 C26 21 21 26 20 40 C19 26 14 21 0 20 C14 19 19 14 20 0Z" fill="#fff" style="filter:drop-shadow(0 0 6px rgba(255,226,160,0.95))"/></svg>';
+            for (var g = 0; g < GW; g++) {
+              var gw = document.createElement("div"); gw.className = "zb-gwiazda"; gw.innerHTML = gwSvg;
+              var ga = -Math.PI / 2 + (prand(g * 5.9) - 0.5) * Math.PI * 1.4 + kier * 0.4, gr = g === 0 ? 0 : 40 + prand(g * 2.3) * 85;
+              gw.style.left = kon[0] + Math.cos(ga) * gr + "px"; gw.style.top = kon[1] + Math.sin(ga) * gr + "px";
+              box.appendChild(gw);
+              var gt = KONIEC - 0.05 + g * 0.09 + prand(g * 4.1) * 0.08, sk = g === 0 ? 1.5 : 0.5 + prand(g) * 0.6;
+              tl.fromTo(gw, { scale: 0, rotation: -45, opacity: 0 }, { scale: sk, rotation: 15, opacity: 1, duration: 0.26, ease: RUCH.ak }, gt);
+              tl.to(gw, { scale: 0, rotation: 60, opacity: 0, duration: 0.34, ease: RUCH.wy }, gt + 0.3 + prand(g * 8.7) * 0.15);
+            }
+            var pyl = [], sp = { T: 0 };
+            for (var k = 0; k < PYL; k++) {
+              var el = document.createElement("div"); el.className = "zb-iskra";
+              var sz = 5 + prand(k * 3.1) * 9; el.style.width = el.style.height = sz + "px";
+              box.appendChild(el);
+              var an = prand(k * 7.3) * Math.PI * 2, pr = 90 + prand(k * 1.7) * 150;
+              pyl.push({ el: el, dx: Math.cos(an) * pr, dy: Math.sin(an) * pr - 40, s: sz });
+            }
+            var ustawPyl = function () {
+              var e = 1 - Math.pow(1 - sp.T, 3);
+              pyl.forEach(function (p) {
+                var qx = kon[0] + p.dx * e, qy = kon[1] + p.dy * e + 60 * sp.T * sp.T;
+                p.el.style.transform = "translate(" + (qx - p.s / 2).toFixed(1) + "px," + (qy - p.s / 2).toFixed(1) + "px)";
+                p.el.style.opacity = sp.T < 0.01 ? 0 : Math.max(0, 1 - Math.max(0, sp.T - 0.35) / 0.65);
+              });
+            };
+            ustawPyl();
+            tl.to(sp, { T: 1, duration: 0.95, ease: "none", onUpdate: ustawPyl }, KONIEC - 0.02);
+
+            // 3. Napis pod brwią: wyostrza się z głębi, potem przez złote słowo przechodzi połysk
+            var txt = $("txt"), t = $("t"), kreska = $("kreska");
+            t.style.fontSize = rozmiar + "px";
+            t.innerHTML = htmlTekstu(tekst);
+            var linie = tekst.split("|").length, wys = linie * rozmiar * 1.12 + 22;
+            var ty = Math.max(nas[1], kon[1]) + 70;
+            ty = Math.min(1920 - 420 - wys, Math.max(220, ty));
+            txt.style.top = ty + "px";
+            var em = t.querySelectorAll("em");
+            var TT = KONIEC + 0.15;
+            tl.fromTo(t, { opacity: 0, y: 26, filter: "blur(14px)", scale: 1.08 }, { opacity: 1, y: 0, filter: "blur(0px)", scale: 1, duration: 0.75, ease: RUCH.we }, TT);
+            kreska.style.width = Math.min(420, rozmiar * 4.2) + "px";
+            tl.fromTo(kreska, { scaleX: 0, opacity: 0 }, { scaleX: 1, opacity: 1, duration: 0.6, ease: RUCH.we }, TT + 0.3);
+            if (em.length) tl.fromTo(em, { backgroundPosition: "100% 50%" }, { backgroundPosition: "0% 50%", duration: 1.0, ease: RUCH.pl }, TT + 0.55);
+
+            // 4. Wyjście: wszystko delikatnie gaśnie i unosi się
+            tl.to([linia, poswiata], { opacity: 0, duration: 0.38, ease: RUCH.wy }, out);
+            tl.to(txt, { opacity: 0, y: -14, duration: 0.38, ease: RUCH.wy }, out);
+            tl.set(clip, { visibility: "hidden" }, Math.max(0, D - 0.01));
+            tl.set({}, {}, D);
+            window.__timelines = window.__timelines || {};
+            window.__timelines[ID] = tl;
+          })();
+        </script>
+      </div>
+    </template>
+  </body>
+</html>

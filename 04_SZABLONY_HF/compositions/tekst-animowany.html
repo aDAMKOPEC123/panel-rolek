@@ -1,0 +1,164 @@
+<!doctype html>
+<!--
+  tekst-animowany: napis z animacją na nagraniu.
+  Efekty (zmienna efekt):
+    pojawianie    słowo po słowie od dołu
+    maszyna       pisanie litera po literze z kursorem
+    przekreslenie stary tekst zostaje przekreślony, wchodzi nowy (mit -> fakt, „było” -> „jest”)
+    marker        podkreślenie markerem w kolorze akcentu za tekstem
+    kolko         odręczne obrysowanie tekstu
+    licznik       pierwsza liczba w tekście odlicza od 0 (np. „6 tygodni”)
+    wyskok        tekst wyskakuje z lekkim obrotem
+  Zmienne: tekst (*słowo* = akcent), nowy (dla przekreślenia), efekt, pozycja (gora|srodek|dol), tlo (pigulka|brak), rozmiar (px).
+  Bez pomiarów DOM: ozdoby (kreska, marker, kółko) rozciągają się CSS-em na szerokość tekstu. Ruch tylko w GSAP.
+-->
+<html
+  lang="pl"
+  data-composition-id="tekst-animowany"
+  data-composition-duration="3"
+  data-composition-variables='[
+    {"id":"tekst","type":"string","label":"Tekst","default":"Laminacja *niszczy* brwi"},
+    {"id":"nowy","type":"string","label":"Nowy tekst (po przekreśleniu)","default":"MIT"},
+    {"id":"efekt","type":"enum","label":"Animacja","default":"przekreslenie","options":[{"value":"pojawianie","label":"Pojawianie słowo po słowie"},{"value":"maszyna","label":"Pisanie (maszyna)"},{"value":"przekreslenie","label":"Przekreślenie i nowy tekst"},{"value":"marker","label":"Podkreślenie markerem"},{"value":"kolko","label":"Obrysowanie kółkiem"},{"value":"licznik","label":"Licznik liczby"},{"value":"wyskok","label":"Wyskok"}]},
+    {"id":"pozycja","type":"enum","label":"Pozycja","default":"srodek","options":[{"value":"gora","label":"Góra"},{"value":"srodek","label":"Środek"},{"value":"dol","label":"Dół (nad napisami)"}]},
+    {"id":"tlo","type":"enum","label":"Tło","default":"pigulka","options":[{"value":"pigulka","label":"Pigułka"},{"value":"brak","label":"Brak (cień)"}]},
+    {"id":"rozmiar","type":"number","label":"Rozmiar liter (px)","default":76,"min":40,"max":140,"step":2}
+  ]'
+>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Tekst animowany</title>
+  </head>
+  <body>
+    <template>
+      <div id="root" data-composition-id="tekst-animowany" data-duration="3" data-fps="30">
+        <style>
+          #root { position: absolute; inset: 0; pointer-events: none; font-family: var(--font-naglowki, "Playfair Display"), serif; }
+          .ta-clip { position: absolute; inset: 0; }
+          .ta { position: absolute; left: var(--safe-left, 60px); right: var(--safe-right, 140px); display: flex; flex-direction: column; align-items: center; gap: 18px; text-align: center; }
+          .ta.gora { top: calc(var(--safe-top, 220px) + 140px); }
+          .ta.srodek { top: 50%; transform: translateY(-50%); }
+          .ta.dol { top: 1130px; }
+          .ta-box { position: relative; display: inline-block; padding: 18px 34px; border-radius: 28px; }
+          .ta-box.pigulka { background: rgba(255, 255, 255, 0.9); box-shadow: 0 16px 46px rgba(8, 32, 50, 0.1); }
+          .ta-tekst { position: relative; z-index: 2; font-weight: 600; line-height: 1.12; color: var(--tekst, #2b2321); }
+          .ta-box.brak .ta-tekst { color: #fff; text-shadow: 0 4px 22px rgba(0, 0, 0, 0.45); }
+          .ta-tekst em { color: var(--akcent, #b07a6e); font-style: italic; }
+          .ta-tekst .w { position: relative; display: inline-block; white-space: pre; }
+          .ta-krw { position: absolute; left: -4px; right: -4px; top: 54%; height: 0.07em; border-radius: 6px; background: var(--akcent-2, #b07a6e); transform-origin: 0 50%; }
+          .ta-tekst .c { display: inline; }
+          .ta-kreska { position: absolute; left: 14px; right: 14px; top: 52%; height: 10px; border-radius: 6px; background: var(--akcent, #b07a6e); transform-origin: 0 50%; z-index: 3; }
+          .ta-marker { position: absolute; left: 18px; right: 18px; bottom: 16px; height: 42%; border-radius: 10px; background: var(--akcent, #b07a6e); opacity: 0.35; transform-origin: 0 50%; z-index: 1; }
+          .ta-kolko { position: absolute; left: -36px; right: -36px; top: -30px; bottom: -30px; width: calc(100% + 72px); height: calc(100% + 60px); z-index: 3; overflow: visible; }
+          .ta-kolko path { fill: none; stroke: var(--akcent, #b07a6e); stroke-width: 7; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+          .ta-kursor { display: inline-block; width: 0.08em; height: 0.9em; margin-left: 0.06em; background: var(--akcent, #b07a6e); vertical-align: -0.08em; }
+          .ta-nowy { font-weight: 600; font-style: italic; color: var(--akcent, #b07a6e); background: rgba(255, 255, 255, 0.94); padding: 10px 40px; border-radius: 999px; box-shadow: 0 14px 40px rgba(8, 32, 50, 0.1), inset 0 0 0 2px color-mix(in srgb, var(--akcent, #b07a6e) 50%, transparent); letter-spacing: 0.02em; }
+          .ta-box.brak + .ta-nowy { background: var(--akcent, #b07a6e); color: #fff; }
+        </style>
+        <div id="tekst-animowany-clip" class="clip ta-clip" data-start="0" data-duration="3" data-track-index="0">
+          <div id="tekst-animowany-wrap" class="ta srodek">
+            <div id="tekst-animowany-box" class="ta-box pigulka">
+              <div id="tekst-animowany-marker" class="ta-marker"></div>
+              <div id="tekst-animowany-tekst" class="ta-tekst"></div>
+              <div id="tekst-animowany-kreska" class="ta-kreska"></div>
+              <svg id="tekst-animowany-kolko" class="ta-kolko" viewBox="0 0 100 100" preserveAspectRatio="none"><path id="tekst-animowany-kolko-p" d="M 62 6 C 88 8, 99 30, 97 52 C 95 78, 70 95, 45 94 C 18 93, 2 74, 3 50 C 4 25, 26 5, 55 4 C 70 3, 82 9, 88 15" /></svg>
+            </div>
+            <div id="tekst-animowany-nowy" class="ta-nowy"></div>
+          </div>
+        </div>
+        <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+        <script>
+          (function () {
+            var ID = "tekst-animowany";
+            var $ = function (s) { return document.getElementById(ID + "-" + s); };
+            var D = parseFloat($("clip").getAttribute("data-duration")) || 3;
+            var v = window.__hyperframes && window.__hyperframes.getVariables ? window.__hyperframes.getVariables() : {};
+            var tekst = v.tekst == null ? "Laminacja *niszczy* brwi" : String(v.tekst);
+            var nowy = v.nowy == null ? "MIT" : String(v.nowy);
+            var efekt = v.efekt || "przekreslenie";
+            var rozmiar = Number(v.rozmiar) || 76;
+            $("wrap").className = "ta " + (v.pozycja || "srodek");
+            $("box").className = "ta-box " + (v.tlo || "pigulka");
+            $("tekst").style.fontSize = rozmiar + "px";
+            $("nowy").style.fontSize = Math.round(rozmiar * 0.9) + "px";
+            var esc = function (s) { return s.replace(/[&<>]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]; }); };
+            // Słowa: *akcent* i | (nowa linia).
+            var linie = tekst.split("|");
+            var slowa = [];
+            var html = linie.map(function (linia) {
+              return linia.trim().split(/\s+/).filter(Boolean).map(function (w) {
+                var akc = /^\*.*\*[.,!?:;]*$/.test(w);
+                var czysty = w.replace(/\*/g, "");
+                slowa.push(czysty);
+                var tresc = efekt === "maszyna" ? czysty.split("").map(function (ch) { return '<span class="c">' + esc(ch) + "</span>"; }).join("") : esc(czysty);
+                return '<span class="w">' + (akc ? "<em>" + tresc + "</em>" : tresc) + (efekt === "przekreslenie" ? '<span class="ta-krw"></span>' : "") + "</span>";
+              }).join(" ");
+            }).join("<br>");
+            $("tekst").innerHTML = html + (efekt === "maszyna" ? '<span class="ta-kursor" id="' + ID + '-kursor"></span>' : "");
+            var W = Array.prototype.slice.call($("tekst").querySelectorAll(".w"));
+            var C = Array.prototype.slice.call($("tekst").querySelectorAll(".c"));
+            ["kreska", "marker", "kolko", "nowy"].forEach(function (k) { $(k).style.display = "none"; });
+            var RUCH = (function () { var cs = getComputedStyle(document.documentElement), g = function (n, d) { var v = (cs.getPropertyValue(n) || "").trim().replace(/^["']|["']$/g, ""); return v || d; }; return { we: g("--ruch-wejscie", "power2.out"), wy: g("--ruch-wyjscie", "power2.in"), ak: g("--ruch-akcent", "back.out(2)"), pl: g("--ruch-plynny", "power2.inOut") }; })(); // styl ruchu marki (zloz: --ruch-*)
+            var tl = gsap.timeline({ paused: true });
+            var wejscie = function (t0) { tl.fromTo($("box"), { opacity: 0, y: 24, scale: 0.96 }, { opacity: 1, y: 0, scale: 1, duration: 0.35, ease: RUCH.we }, t0); };
+            if (efekt === "pojawianie") {
+              tl.fromTo($("box"), { opacity: 0 }, { opacity: 1, duration: 0.2 }, 0);
+              tl.fromTo(W, { opacity: 0, y: 34 }, { opacity: 1, y: 0, duration: 0.32, ease: RUCH.we, stagger: Math.min(0.16, 1.2 / Math.max(1, W.length)) }, 0.05);
+            } else if (efekt === "maszyna") {
+              tl.fromTo($("box"), { opacity: 0 }, { opacity: 1, duration: 0.15 }, 0);
+              var krok = Math.min(0.06, (D * 0.55) / Math.max(1, C.length));
+              tl.set(C, { opacity: 0 }, 0);
+              C.forEach(function (c, i) { tl.set(c, { opacity: 1 }, 0.1 + i * krok); });
+              var k = document.getElementById(ID + "-kursor");
+              if (k) tl.fromTo(k, { opacity: 1 }, { opacity: 0, duration: 0.25, repeat: Math.max(1, Math.floor(D / 0.5) - 1), yoyo: true, ease: "steps(1)" }, 0);
+            } else if (efekt === "przekreslenie") {
+              $("nowy").style.display = "inline-block"; $("nowy").textContent = nowy;
+              wejscie(0);
+              var tk = Math.min(0.9, D * 0.3);
+              // kreska na każdym słowie po kolei (działa też przy tekście w kilku liniach)
+              var K = Array.prototype.slice.call($("tekst").querySelectorAll(".ta-krw"));
+              tl.fromTo(K, { scaleX: 0 }, { scaleX: 1, duration: 0.18, ease: RUCH.pl, stagger: Math.min(0.12, 0.45 / Math.max(1, K.length)) }, tk);
+              tl.to($("tekst"), { opacity: 0.45, duration: 0.25 }, tk + 0.25);
+              tl.fromTo($("nowy"), { opacity: 0, y: 22 }, { opacity: 1, y: 0, duration: 0.45, ease: RUCH.we }, tk + 0.4);
+            } else if (efekt === "marker") {
+              $("marker").style.display = "block";
+              wejscie(0);
+              tl.fromTo($("marker"), { scaleX: 0 }, { scaleX: 1, duration: 0.45, ease: RUCH.we }, 0.35);
+            } else if (efekt === "kolko") {
+              $("kolko").style.display = "block";
+              wejscie(0);
+              var p = $("kolko-p");
+              tl.fromTo(p, { strokeDasharray: 330, strokeDashoffset: 330 }, { strokeDashoffset: 0, duration: 0.6, ease: RUCH.pl }, 0.35);
+            } else if (efekt === "licznik") {
+              wejscie(0);
+              var m = tekst.match(/(\d+(?:[.,]\d+)?)/);
+              if (m) {
+                var cel = Number(m[1].replace(",", ".")), miejsca = (m[1].split(/[.,]/)[1] || "").length;
+                var el = W.find(function (w) { return w.textContent.indexOf(m[1]) >= 0; });
+                // Liczbę podmieniamy w środku <em>, żeby akcent (*1064*) nie znikał.
+                var cel_el = el ? (el.querySelector("em") || el) : null;
+                var stan = { x: 0 };
+                var rysuj = function () { if (cel_el) cel_el.textContent = cel_el.textContent.replace(/\d+(?:[.,]\d+)?/, stan.x.toFixed(miejsca).replace(".", m[1].indexOf(",") >= 0 ? "," : ".")); };
+                rysuj();
+                var TL = Math.min(1.2, D * 0.45);
+                tl.fromTo(stan, { x: 0 }, { x: cel, duration: TL, ease: RUCH.we, onUpdate: rysuj }, 0.2);
+                if (el) {
+                  // Spokojnie (styl marki): liczba wyostrza się w trakcie odliczania, na końcu delikatne „oddechnięcie”, bez drgania.
+                  tl.fromTo(el, { filter: "blur(2px)" }, { filter: "blur(0px)", duration: TL, ease: RUCH.wy }, 0.2);
+                  tl.fromTo(el, { scale: 1 }, { scale: 1.07, duration: 0.22, yoyo: true, repeat: 1, ease: RUCH.pl }, 0.2 + TL);
+                }
+              }
+            } else {
+              tl.fromTo($("box"), { opacity: 0, scale: 0.3, rotation: -8 }, { opacity: 1, scale: 1, rotation: 0, duration: 0.5, ease: RUCH.ak }, 0);
+            }
+            var out = Math.max(0.9, D - 0.3);
+            tl.to($("wrap"), { opacity: 0, duration: 0.25, ease: RUCH.wy }, out);
+            tl.set($("wrap"), { visibility: "hidden" }, Math.min(D - 0.01, out + 0.26));
+            window.__timelines = window.__timelines || {};
+            window.__timelines[ID] = tl;
+          })();
+        </script>
+      </div>
+    </template>
+  </body>
+</html>

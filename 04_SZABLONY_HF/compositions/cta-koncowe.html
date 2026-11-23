@@ -1,0 +1,199 @@
+<!doctype html>
+<!--
+  cta-koncowe: zakończenie rolki. "Zapisz się / link w bio / zapisz rolkę" (styl marki: perła, złoto, granat).
+  Zmienne:
+    tekst     główne zdanie (szeryf, granat), *gwiazdki* = złota kursywa
+    przycisk  tekst w pigułce ze strzałką → (np. "link w bio")
+    styl_przycisku  miedz (miedziane złoto, biały tekst) | obrys (biała pigułka, cienki złoty obrys, granatowy tekst)
+    podpis    mały napis pod przyciskiem (np. telefon); pusty = handle
+    ikona     zapisz (zakładka) | kalendarz | serce | brak
+    handle    @handle z config.json (wstawia skrypt zloz)
+    tlo       plansza | nagranie
+    poswiata  przy tlo=nagranie: true = jasna poświata na dole nagrania (domyślnie), false = tylko karta (nic w strefach UI)
+    miejsce   duża linia z pinezką pod przyciskiem (np. "Kraków, Rynek 1"); pusta = brak
+    info      drobne linie pod miejscem (adres, godziny), | = nowa linia
+    dopisek   krótki dopisek na samym dole (np. udostępnianie), kursywa
+    pokaz_logo  true = logo gabinetu nad tekstem zamiast ikony (slot media "logo", zloz bierze 02_BRAND/logo/logo.png)
+  Mówione, krótkie CTA. Bez "nie przegap" i "wyjątkowa okazja" (02_BRAND/brand.md). Ruch spokojny: fade, slide, rysowane linie.
+-->
+<html
+  lang="pl"
+  data-composition-id="cta-koncowe"
+  data-composition-duration="3"
+  data-composition-variables='[
+    {"id":"tekst","type":"string","label":"Tekst CTA","default":"Zapisz rolkę, *przyda się* przed wizytą"},
+    {"id":"przycisk","type":"string","label":"Przycisk","default":"Zapisy: link w bio"},
+    {"id":"styl_przycisku","type":"enum","label":"Przycisk","default":"miedz","options":[{"value":"miedz","label":"Miedziane złoto"},{"value":"obrys","label":"Biały ze złotym obrysem"}]},
+    {"id":"podpis","type":"string","label":"Podpis pod przyciskiem","default":""},
+    {"id":"ikona","type":"enum","label":"Ikona","default":"zapisz","options":[{"value":"zapisz","label":"Zakładka"},{"value":"kalendarz","label":"Kalendarz"},{"value":"serce","label":"Serce"},{"value":"brak","label":"Brak"}]},
+    {"id":"handle","type":"string","label":"Handle","default":"@twoj_gabinet"},
+    {"id":"tlo","type":"enum","label":"Tło","default":"plansza","options":[{"value":"plansza","label":"Plansza"},{"value":"nagranie","label":"Na nagraniu"}]},
+    {"id":"poswiata","type":"boolean","label":"Poświata pod kartą (na nagraniu)","default":true},
+    {"id":"miejsce","type":"string","label":"Miejsce (pinezka)","default":""},
+    {"id":"info","type":"string","label":"Adres / godziny (| = nowa linia)","default":""},
+    {"id":"dopisek","type":"string","label":"Dopisek na dole","default":""},
+    {"id":"pokaz_logo","type":"boolean","label":"Logo zamiast ikony","default":false}
+  ]'
+>
+  <head>
+    <meta charset="UTF-8" />
+    <title>CTA końcowe</title>
+  </head>
+  <body>
+    <template>
+      <div id="root" data-composition-id="cta-koncowe" data-duration="3" data-fps="30">
+        <style>
+          #root { position: absolute; inset: 0; overflow: hidden; font-family: var(--font-tekst, "Montserrat"), sans-serif; color: var(--tekst, #082032); }
+          .cta-clip { position: absolute; inset: 0; }
+          .cta-bg { position: absolute; inset: 0; background: radial-gradient(110% 70% at 50% 40%, var(--bialy, #fff) 0%, var(--tlo-jasne, #f9f5f3) 55%, var(--nude, #f0e2db) 100%); }
+          .cta-bg.ukryte { background: linear-gradient(180deg, transparent 25%, rgba(249, 245, 243, 0.5) 60%, rgba(249, 245, 243, 0.2) 100%); }
+          .cta-bg.ukryte.bez-poswiaty { background: none; }
+          .cta-bg.ukryte .cta-plama, .cta-bg.ukryte .cta-rog { display: none; }
+          .cta-plama { position: absolute; border-radius: 52% 48% 40% 60% / 46% 58% 42% 54%; background: radial-gradient(closest-side, color-mix(in srgb, var(--akwarela, #a9bccb) 55%, transparent), transparent); filter: blur(30px); }
+          .cta-plama.p1 { right: -150px; top: 240px; width: 600px; height: 540px; }
+          .cta-plama.p2 { left: -200px; top: 1240px; width: 700px; height: 560px; opacity: 0.8; }
+          .cta-rog { position: absolute; width: 330px; height: 330px; overflow: visible; }
+          .cta-rog path { fill: none; stroke-linecap: round; }
+          .cta-rog .l1 { stroke: var(--akcent, #c8a15f); stroke-width: 3; }
+          .cta-rog .l2 { stroke: var(--zloto-jasne, #d7bd89); stroke-width: 2; }
+          .cta-rog.r1 { right: 0; top: 0; }
+          .cta-rog.r2 { left: 0; bottom: 0; transform: rotate(180deg); }
+          .cta-box {
+            position: absolute;
+            left: var(--safe-left, 60px);
+            right: var(--safe-right, 140px);
+            top: 600px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+          }
+          .cta-box.na-nagraniu { top: 760px; padding: 50px 30px 54px; border-radius: 40px; background: rgba(255, 255, 255, 0.88); box-shadow: 0 20px 60px rgba(8, 32, 50, 0.12); }
+          .cta-icon { width: 110px; height: 110px; color: var(--akcent, #c8a15f); }
+          .cta-icon svg { width: 100%; height: 100%; display: block; }
+          .cta-icon.ukryte { display: none; }
+          .cta-txt {
+            margin-top: 30px;
+            font-family: var(--font-naglowki, "Playfair Display"), serif;
+            font-weight: 600;
+            font-size: 80px;
+            line-height: 1.12;
+            color: var(--tekst, #082032);
+          }
+          .cta-txt em { color: var(--akcent, #c8a15f); font-style: italic; }
+          .cta-rule { width: 130px; height: 3px; margin-top: 34px; border-radius: 2px; background: var(--akcent, #c8a15f); }
+          .cta-btn {
+            margin-top: 42px;
+            display: inline-flex;
+            align-items: center;
+            gap: 22px;
+            padding: 24px 46px 26px 52px;
+            border-radius: 999px;
+            background: var(--cta, #b47946);
+            color: var(--bialy, #fff);
+            font-size: 34px;
+            font-weight: 600;
+            letter-spacing: 0.16em;
+            text-transform: uppercase;
+            box-shadow: 0 14px 40px rgba(180, 121, 70, 0.28);
+          }
+          .cta-btn.obrys { background: var(--bialy, #fff); color: var(--tekst, #082032); box-shadow: inset 0 0 0 2px var(--akcent, #c8a15f), 0 12px 34px rgba(8, 32, 50, 0.1); }
+          .cta-strzalka { display: inline-block; font-size: 1.25em; letter-spacing: 0; line-height: 1; }
+          .cta-handle { margin-top: 30px; font-size: 28px; font-weight: 600; letter-spacing: 0.22em; text-transform: uppercase; color: var(--tekst-2, #6a7a8b); }
+          .cta-logo { max-width: 420px; max-height: 150px; object-fit: contain; display: block; }
+          .cta-miejsce { margin-top: 34px; display: inline-flex; align-items: center; gap: 14px; font-family: var(--font-naglowki, "Playfair Display"), serif; font-size: 54px; font-weight: 600; color: var(--tekst, #082032); }
+          .cta-miejsce svg { width: 48px; height: 48px; color: var(--akcent, #c8a15f); flex: none; }
+          .cta-info { margin-top: 12px; display: flex; flex-direction: column; gap: 6px; font-size: 28px; font-weight: 500; color: var(--tekst-2, #6a7a8b); }
+          .cta-dopisek { margin-top: 28px; font-family: var(--font-naglowki, "Playfair Display"), serif; font-style: italic; font-size: 34px; color: var(--tekst-2, #6a7a8b); }
+          .ukryte-el { display: none !important; }
+        </style>
+        <div id="cta-koncowe-clip" class="clip cta-clip" data-start="0" data-duration="3" data-track-index="0">
+          <div id="cta-koncowe-bg" class="cta-bg">
+            <div id="cta-koncowe-p1" class="cta-plama p1"></div>
+            <div id="cta-koncowe-p2" class="cta-plama p2"></div>
+            <svg class="cta-rog r1" viewBox="0 0 330 330"><path id="cta-koncowe-r1a" class="l1" d="M 50 0 A 280 280 0 0 0 330 280" /><path id="cta-koncowe-r1b" class="l2" d="M 120 0 A 210 210 0 0 0 330 210" /></svg>
+            <svg class="cta-rog r2" viewBox="0 0 330 330"><path id="cta-koncowe-r2a" class="l1" d="M 50 0 A 280 280 0 0 0 330 280" /><path id="cta-koncowe-r2b" class="l2" d="M 120 0 A 210 210 0 0 0 330 210" /></svg>
+          </div>
+          <div id="cta-koncowe-box" class="cta-box">
+            <img id="cta-koncowe-logo" class="cta-logo ukryte-el" data-slot-media="logo" src="assets/demo/watermark.png" alt="" />
+            <div id="cta-koncowe-icon" class="cta-icon"></div>
+            <div id="cta-koncowe-txt" class="cta-txt"></div>
+            <div id="cta-koncowe-rule" class="cta-rule"></div>
+            <div id="cta-koncowe-btn" class="cta-btn"><span id="cta-koncowe-btn-t"></span><span id="cta-koncowe-arr" class="cta-strzalka">→</span></div>
+            <div id="cta-koncowe-handle" class="cta-handle"></div>
+            <div id="cta-koncowe-miejsce" class="cta-miejsce ukryte-el"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M12 21s-6.5-6.2-6.5-11a6.5 6.5 0 0 1 13 0c0 4.8-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.3"/></svg><span id="cta-koncowe-miejsce-t"></span></div>
+            <div id="cta-koncowe-info" class="cta-info ukryte-el"></div>
+            <div id="cta-koncowe-dopisek" class="cta-dopisek ukryte-el"></div>
+          </div>
+        </div>
+        <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+        <script>
+          (function () {
+            var ID = "cta-koncowe";
+            var $ = function (s) { return document.getElementById(ID + "-" + s); };
+            var D = parseFloat($("clip").getAttribute("data-duration")) || 3;
+            var v = window.__hyperframes && window.__hyperframes.getVariables ? window.__hyperframes.getVariables() : {};
+            var esc = function (s) { return s.replace(/&/g, "&amp;").replace(/</g, "&lt;"); };
+            var tekst = v.tekst == null ? "Zapisz rolkę, *przyda się* przed wizytą" : String(v.tekst);
+            $("txt").innerHTML = esc(tekst).replace(/\*([^*]+)\*/g, "<em>$1</em>").replace(/\|/g, "<br>");
+            var przycisk = v.przycisk == null ? "Zapisy: link w bio" : String(v.przycisk);
+            $("btn-t").textContent = przycisk;
+            if (!przycisk) $("btn").style.display = "none";
+            if (v.styl_przycisku === "obrys") $("btn").classList.add("obrys");
+            $("handle").textContent = v.podpis ? String(v.podpis) : v.handle == null ? "@twoj_gabinet" : String(v.handle);
+            var naNagraniu = v.tlo === "nagranie";
+            if (naNagraniu) { $("bg").classList.add("ukryte"); $("box").classList.add("na-nagraniu"); }
+            if (naNagraniu && (v.poswiata === false || v.poswiata === "false")) $("bg").classList.add("bez-poswiaty");
+            var ikony = {
+              zapisz: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round"><path d="M6 3h12v18l-6-4.5L6 21z"/></svg>',
+              kalendarz: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>',
+              serce: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round"><path d="M12 20s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7a4.3 4.3 0 0 1 7.5 2.8C19.5 15.4 12 20 12 20z"/></svg>'
+            };
+            var logo = v.pokaz_logo === true || v.pokaz_logo === "true";
+            if (logo) $("logo").classList.remove("ukryte-el");
+            if (v.ikona === "brak" || logo) $("icon").classList.add("ukryte");
+            else $("icon").innerHTML = ikony[v.ikona] || ikony.zapisz;
+            if (v.miejsce) { $("miejsce-t").textContent = String(v.miejsce); $("miejsce").classList.remove("ukryte-el"); }
+            String(v.info || "").split("|").map(function (s) { return s.trim(); }).filter(Boolean).forEach(function (s) {
+              var d = document.createElement("div");
+              d.textContent = s;
+              $("info").appendChild(d);
+              $("info").classList.remove("ukryte-el");
+            });
+            if (v.dopisek) { $("dopisek").textContent = String(v.dopisek); $("dopisek").classList.remove("ukryte-el"); }
+            // Więcej linii = karta wyżej, żeby dół został nad strefą UI (420 px od dołu).
+            if (naNagraniu && (v.miejsce || v.info || v.dopisek)) $("box").style.top = "540px";
+            var RUCH = (function () { var cs = getComputedStyle(document.documentElement), g = function (n, d) { var v = (cs.getPropertyValue(n) || "").trim().replace(/^["']|["']$/g, ""); return v || d; }; return { we: g("--ruch-wejscie", "power2.out"), wy: g("--ruch-wyjscie", "power2.in"), ak: g("--ruch-akcent", "back.out(2)"), pl: g("--ruch-plynny", "power2.inOut") }; })(); // styl ruchu marki (zloz: --ruch-*)
+            var tl = gsap.timeline({ paused: true });
+            tl.fromTo($("bg"), { opacity: 0 }, { opacity: 1, duration: 0.3, ease: RUCH.we }, 0);
+            if (!naNagraniu) {
+              tl.fromTo([$("p1"), $("p2")], { opacity: 0, scale: 0.92 }, { opacity: 1, scale: 1, duration: 1.2, ease: RUCH.we }, 0);
+              tl.fromTo($("p1"), { x: 0, y: 0 }, { x: -22, y: 16, duration: D, ease: "none", immediateRender: false }, 0);
+              tl.fromTo($("p2"), { x: 0, y: 0 }, { x: 20, y: -14, duration: D, ease: "none", immediateRender: false }, 0);
+              ["r1a", "r1b", "r2a", "r2b"].forEach(function (k, i) {
+                tl.fromTo($(k), { strokeDasharray: 520, strokeDashoffset: 520 }, { strokeDashoffset: 0, duration: 0.9, ease: RUCH.pl }, 0.1 + (i % 2) * 0.12 + (i > 1 ? 0.15 : 0));
+              });
+            } else {
+              tl.fromTo($("box"), { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.4, ease: RUCH.we }, 0.05);
+            }
+            // Na nagraniu karta jest widoczna od razu, więc treść wchodzi szybciej (bez pustej białej karty).
+            var K = naNagraniu ? 0.4 : 1;
+            tl.fromTo([$("icon"), $("logo")], { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.4, ease: RUCH.we }, 0.1 * K);
+            tl.fromTo($("txt"), { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.45, ease: RUCH.we }, 0.2 * K);
+            tl.fromTo($("rule"), { scaleX: 0 }, { scaleX: 1, duration: 0.45, ease: RUCH.pl }, 0.45 * K);
+            tl.fromTo($("btn"), { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.4, ease: RUCH.we }, 0.55 * K);
+            tl.fromTo($("handle"), { opacity: 0 }, { opacity: 1, duration: 0.35 }, 0.8 * K);
+            tl.fromTo($("miejsce"), { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.4, ease: RUCH.we }, 0.9 * K);
+            tl.fromTo($("info"), { opacity: 0 }, { opacity: 1, duration: 0.35 }, 1.05 * K);
+            tl.fromTo($("dopisek"), { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.4, ease: RUCH.we }, Math.min(D - 0.6, 1.6));
+            // Strzałka spokojnie „zaprasza” w prawo, dwa razy.
+            tl.fromTo($("arr"), { x: 0 }, { x: 10, duration: 0.35, yoyo: true, repeat: 3, ease: RUCH.pl }, 1.1);
+            tl.set({}, {}, D);
+            window.__timelines = window.__timelines || {};
+            window.__timelines[ID] = tl;
+          })();
+        </script>
+      </div>
+    </template>
+  </body>
+</html>

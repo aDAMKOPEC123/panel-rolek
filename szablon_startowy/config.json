@@ -1,0 +1,93 @@
+{
+  "_opis": "Globalne ustawienia systemu rolek. Uzupełnia je kreator przy pierwszym uruchomieniu panelu (⚙ Ustawienia gabinetu). Skrypty czytają ten plik przy każdym uruchomieniu.",
+  "gabinet": {
+    "nazwa": "TODO",
+    "miasto": "TODO",
+    "osoba": "TODO",
+    "instagram": "TODO",
+    "tiktok": "TODO",
+    "link_w_bio": "TODO",
+    "obserwujacy_tekst": "TODO"
+  },
+  "kolory": {
+    "_uwaga": "Kolory marki (role: 02_BRAND/kolory.json). Najprościej ustawić je w kreatorze albo „🎨 Stylistyka” (także ze strony www).",
+    "akcent": "#B07A6E",
+    "akcent_2": "#8C6B5D",
+    "tekst": "#2B2321",
+    "tlo_jasne": "#F7F1EC",
+    "nude": "#E9D9CF",
+    "bialy": "#FFFFFF",
+    "granat": "#2B2321",
+    "tekst_2": "#8C6B5D",
+    "zloto_jasne": "#C9A28F",
+    "cta": "#8C6B5D",
+    "mocny": "#1E1816",
+    "akwarela": "#E9D9CF"
+  },
+  "obraz": {
+    "_uwaga": "Grading marki robiony przy normalizacji (npm run normalizuj). null = bez. rolka.json -> efekty.grading: false wyłącza w jednej rolce.",
+    "grading": "jasny-premium"
+  },
+  "fonty": {
+    "_uwaga": "Oba są wbudowane w HyperFrames i mają polskie znaki. Własny font wrzuć do 02_BRAND/fonty/ (.woff2) i wpisz tu nazwę pliku.",
+    "naglowki": "Playfair Display",
+    "tekst": "Montserrat",
+    "plik_naglowki": null,
+    "plik_tekst": null
+  },
+  "napisy": {
+    "styl_domyslny": "perla",
+    "style_dostepne": [
+      "este",
+      "perla",
+      "waga",
+      "marker"
+    ],
+    "max_linii": 2,
+    "slow_w_grupie": 4
+  },
+  "cta": {
+    "domyslne": "Zapisz się na wizytę",
+    "dodatkowe": "link w bio",
+    "zapisz_rolke": "Zapisz, żeby nie zgubić"
+  },
+  "rolka": {
+    "dlugosc_domyslna": "15-30",
+    "fps": 30,
+    "szerokosc": 1080,
+    "wysokosc": 1920
+  },
+  "safe_zone": {
+    "_uwaga": "Piksele na kanwie 1080x1920. Porównanie z wartościami HyperFrames w docs/SPECYFIKACJA_IG.md.",
+    "gora": 220,
+    "dol": 420,
+    "prawo": 140,
+    "lewo": 60,
+    "napisy_od_dolu": 620
+  },
+  "audio": {
+    "lufs_cel": -14,
+    "auto_editor_margines": "0.25s",
+    "auto_editor_prog": "-32dB"
+  },
+  "transkrypcja": {
+    "model": "medium",
+    "jezyk": "pl"
+  },
+  "hyperframes": {
+    "wersja": "0.9.39",
+    "jakosc_robocza": "draft",
+    "jakosc_akceptacja": "standard",
+    "jakosc_final": "high"
+  },
+  "ulepszanie": {
+    "_uwaga": "npm run ulepsz. sila_ai 0-100 = ile obrazu z AI (reszta z oryginału, żeby nie wygładzać skóry). wygladzanie 0-100 = antyaliasing krawędzi i miękkość obwódki wycięć. gpu: null = sama wybiera kartę dedykowaną.",
+    "sila_ai": 50,
+    "wygladzanie": 50,
+    "gpu": null
+  },
+  "ruch": {
+    "_opis": "Styl ruchu marki (krzywe animacji we wszystkich szablonach): klasyczny | miekki | elegancki | sprezysty | dynamiczny. Rolka może nadpisać polem ruch w rolka.json.",
+    "styl": "miekki"
+  }
+}

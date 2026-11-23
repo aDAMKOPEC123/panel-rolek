@@ -1,0 +1,7 @@
+{
+  "_opis": "Pamięć autopilota (panel: „🪄 Autopilot”). Claude czyta ją na początku każdej rolki i dopisuje po wywiadzie: co prowadząca (config.json -> gabinet.osoba) chce, czego nie chce, ustawienia, które wybiera zwykle. Dzięki temu przy kolejnych rolkach pyta mniej. Można edytować ręcznie.",
+  "chce": [],
+  "nie_chce": [],
+  "ustawienia": {},
+  "historia": []
+}

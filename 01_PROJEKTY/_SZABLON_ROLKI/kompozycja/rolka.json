@@ -1,0 +1,23 @@
+{
+  "tytul": "TODO",
+  "kategoria": "TODO",
+  "debug_safe_zone": false,
+  "watermark": true,
+  "ujecia": [
+    { "src": "proxy/KLIP_Z_MOWA.mp4", "od": 0, "do": 4, "dzwiek": true, "przejscie_po": "ciecie" }
+  ],
+  "voiceover": null,
+  "muzyka": null,
+  "napisy": {
+    "wlacz": true,
+    "plik": "napisy/transcript.json",
+    "zrodlo": "proxy/KLIP_Z_MOWA.mp4",
+    "styl": null,
+    "wyroznij": [],
+    "przesuniecie": 0
+  },
+  "sceny": [
+    { "szablon": "hook-tytul", "start": 0, "czas": 2, "dane": { "tekst": "TODO *hook*", "wariant": "slowa" } },
+    { "szablon": "cta-koncowe", "start": 4, "czas": 2.5, "dane": { "tekst": "Zapisz rolkę, *przyda się*" } }
+  ]
+}

@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#f7f1ec" />
+<title>Nagrania do rolki</title>
+<style>
+  :root { --akcent: #b07a6e; --tekst: #2b2321; --tlo: #f7f1ec; --karta: #fff; --szary: #8a7a73; --ok: #3f7d4e; --blad: #c0463b; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--tlo); color: var(--tekst); font-size: 16px; line-height: 1.4; padding: 0 16px calc(120px + env(safe-area-inset-bottom)); }
+  header { position: sticky; top: 0; z-index: 5; background: var(--tlo); padding: calc(14px + env(safe-area-inset-top)) 0 10px; display: flex; align-items: center; gap: 10px; }
+  header h1 { font-size: 19px; margin: 0; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  header small { display: block; color: var(--szary); font-size: 12px; font-weight: 500; }
+  .wstecz { border: 0; background: var(--karta); width: 42px; height: 42px; border-radius: 50%; font-size: 20px; box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+  h2 { font-size: 15px; color: var(--szary); font-weight: 600; margin: 18px 0 8px; text-transform: uppercase; letter-spacing: .04em; }
+  .karta { background: var(--karta); border-radius: 18px; padding: 16px; margin-bottom: 12px; box-shadow: 0 4px 16px rgba(43,35,33,.06); }
+  button.karta { width: 100%; text-align: left; border: 0; font: inherit; color: inherit; display: block; }
+  .karta b { font-size: 17px; }
+  .meta { color: var(--szary); font-size: 13px; margin-top: 2px; }
+  .chip { display: inline-block; font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px; background: var(--tlo); color: var(--akcent); text-transform: uppercase; letter-spacing: .04em; }
+  .chip.ok { background: #e6f2e8; color: var(--ok); }
+  .przyciski { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+  .btn { flex: 1; min-width: 120px; border: 0; border-radius: 14px; padding: 14px 12px; font: inherit; font-weight: 700; background: var(--akcent); color: #fff; text-align: center; cursor: pointer; }
+  .btn.jasny { background: var(--tlo); color: var(--tekst); }
+  .btn input { display: none; }
+  .mat-naglowek { display: flex; align-items: center; gap: 8px; justify-content: space-between; }
+  .jak { font-size: 13px; color: var(--szary); margin-top: 6px; }
+  .tele-podglad { margin-top: 10px; background: var(--tlo); border-radius: 12px; padding: 10px 12px; font-size: 14px; max-height: 5.6em; overflow: hidden; position: relative; }
+  .tele-podglad::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 1.6em; background: linear-gradient(transparent, var(--tlo)); }
+  .kolejka { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; background: var(--karta); box-shadow: 0 -6px 24px rgba(0,0,0,.12); padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); border-radius: 20px 20px 0 0; max-height: 45vh; overflow: auto; }
+  .kolejka:empty { display: none; }
+  .wys { margin: 6px 0; font-size: 13px; }
+  .wys .pasek { height: 6px; background: var(--tlo); border-radius: 3px; overflow: hidden; margin-top: 4px; }
+  .wys .pasek i { display: block; height: 100%; background: var(--akcent); width: 0; transition: width .2s; }
+  .wys.ok .pasek i { background: var(--ok); }
+  .wys.blad { color: var(--blad); }
+  .wys button { border: 0; background: none; color: var(--akcent); font-weight: 700; font: inherit; padding: 0 0 0 6px; }
+  .info { font-size: 13px; color: var(--szary); text-align: center; margin: 14px 0; }
+  .pusto { text-align: center; color: var(--szary); padding: 30px 10px; }
+  /* teleprompter */
+  #tele { position: fixed; inset: 0; z-index: 20; background: #000; color: #fff; display: none; flex-direction: column; }
+  #tele.on { display: flex; }
+  #teleTekst { flex: 1; overflow: auto; padding: 30vh 22px 60vh; font-size: var(--ts, 34px); line-height: 1.35; font-weight: 600; scroll-behavior: auto; }
+  #teleTekst p { margin: 0 0 1em; }
+  #teleTekst small { display: block; font-size: .45em; color: #c9b8b0; font-weight: 500; margin-bottom: .2em; text-transform: uppercase; letter-spacing: .06em; }
+  .tele-pasek { display: flex; gap: 8px; align-items: center; padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); background: #111; }
+  .tele-pasek button { border: 0; border-radius: 12px; padding: 12px 14px; font: inherit; font-weight: 700; background: #333; color: #fff; }
+  .tele-pasek button.glowny { background: var(--akcent); flex: 1; }
+  .tele-pasek input { width: 90px; accent-color: var(--akcent); }
+  .tele-linia { position: absolute; left: 0; right: 0; top: 30vh; height: 0; border-top: 2px dashed rgba(255,255,255,.25); pointer-events: none; }
+</style>
+</head>
+<body>
+<header><button class="wstecz" id="wstecz" hidden aria-label="Wróć">←</button><h1 id="tytul">Nagrania do rolki<small id="podtytul"></small></h1></header>
+<main id="ekran"><p class="pusto">Ładuję…</p></main>
+<div class="kolejka" id="kolejka"></div>
+<div id="tele"><div class="tele-linia"></div><div id="teleTekst"></div>
+  <div class="tele-pasek"><button id="teleZamknij">✕</button><button id="teleMniej">A−</button><button id="teleWiecej">A+</button><input type="range" id="teleTempo" min="10" max="120" value="40" aria-label="Tempo"><button class="glowny" id="teleStart">▶ Przewijaj</button></div></div>
+<script>
+"use strict";
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+const API = location.pathname.replace(/\/?$/, "/") + "api/";
+const ST = { rolki: [], rolka: null, kolejka: [], trwa: false };
+async function get(u) { const r = await fetch(API + u, { cache: "no-store" }); const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.blad || "Błąd " + r.status); return j; }
+const MB = (b) => (b / 1048576).toFixed(b > 1e8 ? 0 : 1) + " MB";
+
+async function start() {
+  try {
+    const d = await get("rolki");
+    ST.rolki = d.rolki;
+    document.documentElement.style.setProperty("--akcent", d.marka.akcent);
+    $("#podtytul").textContent = d.marka.nazwa;
+    lista();
+  } catch (e) { $("#ekran").innerHTML = `<p class="pusto">✗ ${esc(e.message)}<br><br>Sprawdź, czy telefon jest w tym samym Wi-Fi co komputer i czy panel jest włączony.</p>`; }
+}
+function lista() {
+  ST.rolka = null;
+  $("#wstecz").hidden = true;
+  $("#tytul").firstChild.textContent = "Do której rolki?";
+  $("#ekran").innerHTML = `
+    ${ST.rolki.map((r) => `<button class="karta" data-r="${esc(r.nazwa)}">${r.kategoria ? `<span class="chip">${esc(r.kategoria)}</span> ` : ""}${r.materialy ? `<span class="chip">${r.materialy} do nagrania</span>` : ""}<br><b>${esc(r.tytul)}</b><div class="meta">${esc(r.data)}${r.status ? " · " + esc(r.status) : ""}</div></button>`).join("") || `<p class="pusto">Nie ma rolek w trakcie. Załóż rolkę w panelu na komputerze albo wrzuć nagrania do skrzynki.</p>`}
+    <h2>Bez rolki</h2>
+    <div class="karta"><b>📥 Skrzynka (00_INBOX)</b><div class="meta">Nagrania czekają na komputerze, rolkę założysz później (np. Autopilotem).</div>
+      <div class="przyciski">${przyciskPliku("inbox", "🎥 Nagraj", "environment", false)}${przyciskPliku("inbox", "🖼️ Z galerii", null, true)}</div></div>`;
+  document.querySelectorAll("[data-r]").forEach((b) => (b.onclick = () => rolka(b.dataset.r)));
+  podepnijPliki();
+}
+async function rolka(nazwa) {
+  window.scrollTo(0, 0);
+  $("#ekran").innerHTML = `<p class="pusto">Ładuję…</p>`;
+  $("#wstecz").hidden = false;
+  try { ST.rolka = await get("rolka/" + encodeURIComponent(nazwa)); } catch (e) { $("#ekran").innerHTML = `<p class="pusto">✗ ${esc(e.message)}</p>`; return; }
+  const R = ST.rolka;
+  $("#tytul").firstChild.textContent = R.tytul;
+  const cel = (mid) => `mat:${R.nazwa}:${mid}`;
+  $("#ekran").innerHTML = (R.materialy.length ? `<h2>Co nagrać</h2>` + R.materialy.map((m) => `
+    <div class="karta"><div class="mat-naglowek"><b>${esc(m.id)} · ${esc(m.opis ? m.opis.split(/[.,]/)[0] : m.nazwa_pliku)}</b>${m.wgrane ? `<span class="chip ok">✓ ${m.wgrane}</span>` : m.obowiazkowy ? `<span class="chip">potrzebne</span>` : `<span class="chip">opcjonalne</span>`}</div>
+      ${m.opis ? `<div class="meta">${esc(m.opis)}</div>` : ""}
+      ${m.jak || m.czas ? `<div class="jak">📐 ${esc([m.jak, m.czas].filter(Boolean).join(" · "))}</div>` : ""}
+      ${m.teleprompter.length ? `<div class="tele-podglad">${m.teleprompter.map((k) => esc(k.tekst)).join(" ")}</div>` : ""}
+      <div class="przyciski">${m.teleprompter.length ? `<button class="btn jasny" data-tele="${esc(m.id)}">📜 Tekst</button>` : ""}${przyciskPliku(cel(m.id), "🎥 Nagraj", m.typ === "mowa" ? "user" : "environment", false)}${przyciskPliku(cel(m.id), "🖼️ Z galerii", null, true)}</div></div>`).join("") : "")
+    + `<h2>${R.materialy.length ? "Inne nagrania" : "Nagrania do tej rolki"}</h2><div class="karta"><div class="meta">${R.materialy.length ? "Coś spoza listy, np. dodatkowe ujęcie albo zdjęcie przed/po." : "Nagraj albo wybierz z galerii, Claude w panelu je obejrzy i ułoży."} W rolce: ${R.nagrania} plików.</div>
+      <div class="przyciski">${przyciskPliku(`raw:${R.nazwa}`, "🎥 Nagraj", "environment", false)}${przyciskPliku(`raw:${R.nazwa}`, "🖼️ Z galerii", null, true)}</div></div>
+    <p class="info">Wysyłka idzie przez Wi-Fi w pełnej jakości. Nie blokuj telefonu, dopóki pasek na dole nie skończy.</p>`;
+  document.querySelectorAll("[data-tele]").forEach((b) => (b.onclick = () => teleprompter(R.materialy.find((m) => m.id === b.dataset.tele))));
+  podepnijPliki();
+}
+// <label> z ukrytym input: „Nagraj” otwiera aparat (capture), „Z galerii” wybór wielu plików
+function przyciskPliku(cel, tekst, capture, wiele) {
+  return `<label class="btn${wiele ? " jasny" : ""}">${tekst}<input type="file" accept="video/*,image/*" data-cel="${esc(cel)}"${capture ? ` capture="${capture}"` : ""}${wiele ? " multiple" : ""}></label>`;
+}
+function podepnijPliki() {
+  document.querySelectorAll("input[data-cel]").forEach((i) => (i.onchange = () => { for (const f of i.files) dodaj(i.dataset.cel, f); i.value = ""; }));
+}
+function adresWysylki(cel, f) {
+  const n = "?nazwa=" + encodeURIComponent(f.name || "nagranie.mp4");
+  if (cel === "inbox") return API + "inbox" + n;
+  const [typ, rolka, mid] = cel.split(":");
+  return typ === "mat" ? `${API}rolka/${encodeURIComponent(rolka)}/material/${encodeURIComponent(mid)}${n}` : `${API}rolka/${encodeURIComponent(rolka)}/raw${n}`;
+}
+function dodaj(cel, f) {
+  ST.kolejka.push({ cel, f, stan: "czeka", postep: 0, opis: cel === "inbox" ? "skrzynka" : cel.startsWith("mat:") ? cel.split(":")[2] : "rolka" });
+  rysujKolejke();
+  nastepny();
+}
+function rysujKolejke() {
+  const k = $("#kolejka");
+  if (!ST.kolejka.length) { k.innerHTML = ""; return; }
+  const gotowe = ST.kolejka.filter((x) => x.stan === "ok").length;
+  k.innerHTML = `<b>Wysyłanie ${gotowe}/${ST.kolejka.length}</b>` + ST.kolejka.slice().reverse().map((x, i) => {
+    const idx = ST.kolejka.length - 1 - i;
+    return `<div class="wys ${x.stan}">${x.stan === "ok" ? "✓" : x.stan === "blad" ? "✗" : "⏳"} ${esc(x.opis)} · ${esc(x.f.name)} (${MB(x.f.size)})${x.stan === "blad" ? ` ${esc(x.blad || "")}<button data-ponow="${idx}">Ponów</button>` : ""}<div class="pasek"><i style="width:${x.stan === "ok" ? 100 : Math.round(x.postep * 100)}%"></i></div></div>`;
+  }).join("") + (gotowe === ST.kolejka.length ? `<div class="przyciski"><button class="btn jasny" id="wyczysc">Gotowe, wyczyść listę</button></div>` : "");
+  k.querySelectorAll("[data-ponow]").forEach((b) => (b.onclick = () => { const x = ST.kolejka[Number(b.dataset.ponow)]; x.stan = "czeka"; x.postep = 0; rysujKolejke(); nastepny(); }));
+  const w = $("#wyczysc"); if (w) w.onclick = () => { ST.kolejka = []; rysujKolejke(); if (ST.rolka) rolka(ST.rolka.nazwa); };
+}
+function nastepny() {
+  if (ST.trwa) return;
+  const x = ST.kolejka.find((q) => q.stan === "czeka");
+  if (!x) { if (ST.rolka && ST.kolejka.every((q) => q.stan === "ok")) rolka(ST.rolka.nazwa); return; }
+  ST.trwa = true; x.stan = "trwa";
+  const xhr = new XMLHttpRequest();
+  xhr.open("POST", adresWysylki(x.cel, x.f));
+  xhr.upload.onprogress = (e) => { if (e.lengthComputable) { x.postep = e.loaded / e.total; rysujKolejke(); } };
+  const koniec = (ok, blad) => { ST.trwa = false; x.stan = ok ? "ok" : "blad"; x.blad = blad; rysujKolejke(); nastepny(); };
+  xhr.onload = () => { let j = {}; try { j = JSON.parse(xhr.responseText); } catch {} if (xhr.status === 200) koniec(true); else koniec(false, j.blad || "błąd " + xhr.status); };
+  xhr.onerror = () => koniec(false, "brak połączenia z komputerem");
+  xhr.send(x.f);
+}
+// teleprompter: duży tekst na czarnym tle, przewijanie w stałym tempie (czytasz przed nagraniem albo z drugiego telefonu)
+let teleRaf = null, teleOst = 0, teleY = 0;
+function teleprompter(m) {
+  $("#teleTekst").innerHTML = m.teleprompter.map((k) => `<p>${k.kiedy ? `<small>${esc(k.kiedy)}</small>` : ""}${esc(k.tekst)}</p>`).join("");
+  $("#tele").classList.add("on");
+  $("#teleTekst").scrollTop = 0; teleY = 0;
+  stopTele();
+}
+function stopTele() { cancelAnimationFrame(teleRaf); teleRaf = null; $("#teleStart").textContent = "▶ Przewijaj"; }
+function krokTele(t) {
+  const dt = teleOst ? (t - teleOst) / 1000 : 0; teleOst = t;
+  const el = $("#teleTekst");
+  teleY += dt * Number($("#teleTempo").value);
+  el.scrollTop = teleY;
+  if (el.scrollTop + el.clientHeight >= el.scrollHeight - 2) return stopTele();
+  teleRaf = requestAnimationFrame(krokTele);
+}
+$("#teleStart").onclick = () => { if (teleRaf) return stopTele(); teleY = $("#teleTekst").scrollTop; teleOst = 0; $("#teleStart").textContent = "⏸ Pauza"; teleRaf = requestAnimationFrame(krokTele); };
+$("#teleZamknij").onclick = () => { stopTele(); $("#tele").classList.remove("on"); };
+const rozmiar = (d) => { const s = document.documentElement.style, v = parseFloat(s.getPropertyValue("--ts")) || 34; s.setProperty("--ts", Math.max(20, Math.min(64, v + d)) + "px"); };
+$("#teleMniej").onclick = () => rozmiar(-4);
+$("#teleWiecej").onclick = () => rozmiar(4);
+$("#wstecz").onclick = lista;
+window.addEventListener("beforeunload", (e) => { if (ST.kolejka.some((q) => q.stan === "trwa" || q.stan === "czeka")) { e.preventDefault(); e.returnValue = ""; } });
+start();
+</script>
+</body>
+</html>

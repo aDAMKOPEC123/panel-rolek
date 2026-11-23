@@ -1,0 +1,109 @@
+<!doctype html>
+<!--
+  tekst-za-postacia: duży napis między tłem a wyciętą postacią/dłonią.
+  Warstwy (z-index): nagranie (1) -> tekst (2) -> wycięta postać z remove-background (3).
+  Media podmienia skrypt zloz (atrybut data-slot-media):
+    tlo      klip z proxy/ (ten sam co w wyciete/, ta sama długość i początek!)
+    wyciete  przezroczysty .webm z: npx hyperframes remove-background proxy/X.mp4 -o wyciete/X.webm
+  Zmienne:
+    tekst     1-2 krótkie słowa, | = nowa linia (np. "PRZED|ZABIEGIEM")
+    kolor     bialy | akcent | ciemny
+    wysokosc  pozycja środka napisu od góry w px (domyślnie 560, tak żeby głowa przykryła 30-55% napisu)
+  Uwaga: check traktuje wideo jako nieprzezroczyste, stąd data-layout-allow-occlusion na wycięciu.
+  Sprawdzaj na snapshot, czy napis jest zasłonięty w 30-55% (captions.md w skillu hyperframes).
+-->
+<html
+  lang="pl"
+  data-composition-id="tekst-za-postacia"
+  data-composition-duration="3"
+  data-composition-variables='[
+    {"id":"tekst","type":"string","label":"Napis za postacią","default":"GLOW"},
+    {"id":"kolor","type":"enum","label":"Kolor","default":"bialy","options":[{"value":"bialy","label":"Biały"},{"value":"akcent","label":"Akcent"},{"value":"ciemny","label":"Ciemny"}]},
+    {"id":"wysokosc","type":"number","label":"Środek napisu od góry (px)","default":560,"min":250,"max":1400,"step":10}
+  ]'
+>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Tekst za postacią</title>
+  </head>
+  <body>
+    <template>
+      <div id="root" data-composition-id="tekst-za-postacia" data-duration="3" data-fps="30">
+        <style>
+          #root {
+            position: absolute;
+            inset: 0;
+            overflow: hidden;
+            background: var(--tekst, #2b2321);
+          }
+          .tzp-media {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 1080px;
+            height: 1920px;
+            object-fit: cover;
+          }
+          .tzp-txt-clip {
+            position: absolute;
+            inset: 0;
+            z-index: 2;
+          }
+          .tzp-txt {
+            position: absolute;
+            left: var(--safe-left, 60px);
+            right: var(--safe-right, 140px);
+            text-align: center;
+            font-family: var(--font-naglowki, "Playfair Display"), serif;
+            font-weight: 900;
+            line-height: 0.88;
+            letter-spacing: -0.02em;
+            color: var(--bialy, #fff);
+            transform: translateY(-50%);
+          }
+          .tzp-line {
+            display: block;
+            white-space: nowrap;
+          }
+        </style>
+        <video id="tekst-za-postacia-tlo" class="clip tzp-media" data-slot-media="tlo" src="assets/demo/tlo.mp4" data-start="0" data-duration="3" data-track-index="0" muted playsinline style="z-index:1"></video>
+        <div id="tekst-za-postacia-txtclip" class="clip tzp-txt-clip" data-start="0" data-duration="3" data-track-index="1" data-layout-allow-overflow>
+          <div id="tekst-za-postacia-txt" class="tzp-txt"></div>
+        </div>
+        <video id="tekst-za-postacia-wyciete" class="clip tzp-media" data-slot-media="wyciete" src="assets/demo/wyciete.webm" data-start="0" data-duration="3" data-track-index="2" muted playsinline data-layout-allow-occlusion style="z-index:3"></video>
+        <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+        <script>
+          (function () {
+            var ID = "tekst-za-postacia";
+            var clip = document.getElementById(ID + "-txtclip");
+            var txt = document.getElementById(ID + "-txt");
+            var D = parseFloat(clip.getAttribute("data-duration")) || 3;
+            var v = window.__hyperframes && window.__hyperframes.getVariables ? window.__hyperframes.getVariables() : {};
+            var tekst = String(v.tekst == null ? "GLOW" : v.tekst);
+            var kolory = { bialy: "var(--bialy, #fff)", akcent: "var(--akcent, #b07a6e)", ciemny: "var(--tekst, #2b2321)" };
+            txt.style.color = kolory[v.kolor] || kolory.bialy;
+            var y = Number(v.wysokosc);
+            txt.style.top = (isFinite(y) && y > 0 ? y : 560) + "px";
+            var lines = tekst.split("|").map(function (s) { return s.trim(); }).filter(Boolean);
+            var longest = lines.reduce(function (m, l) { return Math.max(m, l.length); }, 1);
+            // Szerokość między marginesami safe zone (880 px). Wielkie litery Playfair 900 to ok. 0.86 em na znak.
+            var size = Math.min(320, Math.floor(860 / (longest * 0.86)));
+            txt.style.fontSize = size + "px";
+            lines.forEach(function (l) {
+              var s = document.createElement("span");
+              s.className = "tzp-line";
+              s.textContent = l;
+              txt.appendChild(s);
+            });
+            var RUCH = (function () { var cs = getComputedStyle(document.documentElement), g = function (n, d) { var v = (cs.getPropertyValue(n) || "").trim().replace(/^["']|["']$/g, ""); return v || d; }; return { we: g("--ruch-wejscie", "power2.out"), wy: g("--ruch-wyjscie", "power2.in"), ak: g("--ruch-akcent", "back.out(2)"), pl: g("--ruch-plynny", "power2.inOut") }; })(); // styl ruchu marki (zloz: --ruch-*)
+            var tl = gsap.timeline({ paused: true });
+            tl.fromTo(txt.children, { opacity: 0, yPercent: 18 }, { opacity: 1, yPercent: 0, duration: 0.5, stagger: 0.08, ease: RUCH.we }, 0.1);
+            tl.to(txt, { opacity: 0, duration: 0.25, ease: RUCH.wy }, Math.max(0.8, D - 0.3));
+            window.__timelines = window.__timelines || {};
+            window.__timelines[ID] = tl;
+          })();
+        </script>
+      </div>
+    </template>
+  </body>
+</html>

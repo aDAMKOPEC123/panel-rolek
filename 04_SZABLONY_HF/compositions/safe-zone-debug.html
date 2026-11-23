@@ -1,0 +1,53 @@
+<!doctype html>
+<!--
+  safe-zone-debug: nakładka do PODGLĄDU safe zone Instagrama. Włączana flagą
+  "debug_safe_zone": true w rolka.json. Skrypt render odmawia renderu final z tą flagą.
+  Czerwone pola = UI Instagrama (nie kładź tam tekstu). Linia przerywana = granica
+  pasma treści według HyperFrames (168-1330 px), dla porównania.
+-->
+<html lang="pl" data-composition-id="safe-zone-debug" data-composition-duration="10">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Safe zone debug</title>
+  </head>
+  <body>
+    <template>
+      <div id="root" data-composition-id="safe-zone-debug" data-duration="10" data-fps="30">
+        <style>
+          #root { position: absolute; inset: 0; pointer-events: none; font-family: "Montserrat", sans-serif; }
+          .sz-clip { position: absolute; inset: 0; }
+          .sz { position: absolute; background: rgba(255, 0, 60, 0.28); border: 2px solid rgba(255, 0, 60, 0.8); }
+          .sz span { position: absolute; left: 12px; top: 8px; font-size: 22px; font-weight: 700; color: #fff; text-shadow: 0 1px 3px #000; }
+          .sz-top { left: 0; right: 0; top: 0; height: var(--safe-top, 220px); }
+          .sz-bottom { left: 0; right: 0; bottom: 0; height: var(--safe-bottom, 420px); }
+          .sz-right { right: 0; width: var(--safe-right, 140px); top: var(--safe-top, 220px); bottom: var(--safe-bottom, 420px); }
+          .sz-left { left: 0; width: var(--safe-left, 60px); top: var(--safe-top, 220px); bottom: var(--safe-bottom, 420px); background: rgba(255, 170, 0, 0.18); border-color: rgba(255, 170, 0, 0.7); }
+          .sz-hf { position: absolute; left: 0; right: 0; border-top: 3px dashed #00e0ff; }
+          .sz-hf span { position: absolute; right: 150px; top: 4px; font-size: 20px; font-weight: 700; color: #00e0ff; text-shadow: 0 1px 3px #000; }
+          .sz-cap { position: absolute; left: var(--safe-left, 60px); right: var(--safe-right, 140px); bottom: var(--napisy-od-dolu, 620px); height: 4px; background: #7CFF6B; }
+          .sz-cap span { position: absolute; left: 0; top: 6px; font-size: 20px; font-weight: 700; color: #7CFF6B; text-shadow: 0 1px 3px #000; }
+        </style>
+        <div id="safe-zone-debug-clip" class="clip sz-clip" data-start="0" data-duration="10" data-track-index="0" data-layout-ignore>
+          <div class="sz sz-top"><span>UI IG: góra (220 px)</span></div>
+          <div class="sz sz-bottom"><span>UI IG: opis, nick, muzyka (420 px)</span></div>
+          <div class="sz sz-right"><span>przyciski</span></div>
+          <div class="sz sz-left"></div>
+          <div class="sz-hf" style="top: 168px"><span>HF: 168</span></div>
+          <div class="sz-hf" style="top: 1330px"><span>HF: koniec pasma treści 1330</span></div>
+          <div class="sz-cap"><span>dół napisów</span></div>
+        </div>
+        <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+        <script>
+          (function () {
+            var clip = document.getElementById("safe-zone-debug-clip");
+            var D = parseFloat(clip.getAttribute("data-duration")) || 10;
+            var tl = gsap.timeline({ paused: true });
+            tl.set({}, {}, D);
+            window.__timelines = window.__timelines || {};
+            window.__timelines["safe-zone-debug"] = tl;
+          })();
+        </script>
+      </div>
+    </template>
+  </body>
+</html>

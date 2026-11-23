@@ -1,0 +1,22 @@
+{
+  "_opis": "Wybrany styl napisów. Skrypt zloz bierze go, jeśli rolka.json nie mówi inaczej. Style są w 04_SZABLONY_HF/compositions/napisy.html.",
+  "domyslny": "perla",
+  "style": {
+    "este": {
+      "opis": "Szeryf (font nagłówków) na półprzezroczystym białym boksie, słowa kluczowe i liczby kursywą w kolorze akcentu. Wejście spokojne: fade i delikatny slide, bez skakania.",
+      "kiedy": "marki premium, spokojne rolki edukacyjne"
+    },
+    "perla": {
+      "opis": "Kremowa pigułka, słowa zapalają się z beżu na ciemny brąz, słowa kluczowe w kolorze akcentu. Najczytelniejszy na jasnym, zabiegowym tle. Mechanika z katalogu: caption-pill-karaoke.",
+      "kiedy": "domyślnie, gadająca głowa w gabinecie, jasne tło"
+    },
+    "waga": {
+      "opis": "Bez tła, biały tekst z miękkim cieniem, aktywne słowo przechodzi z cienkiego na grube. Elegancki, magazynowy. Mechanika z katalogu: caption-weight-shift.",
+      "kiedy": "ciemniejsze ujęcia, zbliżenia, estetyka premium"
+    },
+    "marker": {
+      "opis": "Pudrowy marker przesuwa się pod aktywnym słowem. Najbardziej dynamiczny. Mechanika z katalogu: caption-highlight (czerwień zamieniona na kolor marki).",
+      "kiedy": "edukacja, listy, mit vs fakt, szybkie tempo"
+    }
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "tytul": "Podgląd szablonów",
+  "debug_safe_zone": true,
+  "watermark": true,
+  "ujecia": [
+    { "kolor": "#E9D9CF", "czas": 2.4, "etykieta": "kolor 1 · przenikanie", "przejscie_po": "przenikanie" },
+    { "kolor": "#C9A99A", "czas": 2.6, "etykieta": "kolor 2 · zoom", "przejscie_po": "zoom" },
+    { "src": "raw/tlo.mp4", "od": 0, "do": 3, "przejscie_po": "swiatlo" },
+    { "src": "raw/po.jpg", "czas": 4.2, "przejscie_po": "flash" },
+    { "kolor": "#D9B8A8", "czas": 3.0, "etykieta": "kolor 3 · przyciemnienie", "przejscie_po": "przyciemnienie" },
+    { "kolor": "#F2E4DC", "czas": 9.0, "etykieta": "kolor 4", "przejscie_po": "ciecie" },
+    { "kolor": "#8C6B5D", "czas": 9.6, "etykieta": "kolor 5" }
+  ],
+  "napisy": { "wlacz": true, "plik": "napisy/transcript.json", "styl": "perla", "wyroznij": ["laminacja", "brwi", "henna", "pedicure"] },
+  "sceny": [
+    { "szablon": "hook-tytul", "start": 0, "czas": 2.4, "dane": { "tekst": "Laminacja *brwi*: ile to trzyma?", "wariant": "slowa" } },
+    { "szablon": "hook-tytul", "start": 2.4, "czas": 2.4, "dane": { "tekst": "Nie rób tego|po *henna*", "wariant": "maska", "tlo": "brak", "podtekst": "wariant: maska" } },
+    { "szablon": "tekst-za-postacia", "start": 4.8, "czas": 3, "dane": { "tekst": "GLOW", "wysokosc": 520 }, "media": { "tlo": "raw/tlo.mp4", "wyciete": "raw/wyciete.webm" } },
+    { "szablon": "przed-po", "start": 7.8, "czas": 3.6, "dane": { "tryb": "wipe" }, "media": { "przed": "raw/przed.jpg", "po": "raw/po.jpg" } },
+    { "szablon": "przed-po", "start": 11.4, "czas": 2.8, "dane": { "tryb": "split", "dopisek": "" }, "media": { "przed": "raw/przed.jpg", "po": "raw/po.jpg" } },
+    { "szablon": "lista-krokow", "start": 14.2, "czas": 6, "dane": {} },
+    { "szablon": "lower-third", "start": 20.4, "czas": 3, "dane": { "rola": "kosmetolożka · podolożka" } },
+    { "szablon": "cena-oferta", "start": 23.4, "czas": 3, "dane": { "cena_stara": "220 zł" } },
+    { "szablon": "ig-obserwuj", "start": 26.4, "czas": 3, "dane": {} },
+    { "szablon": "hook-tytul", "start": 29.4, "czas": 2, "dane": { "tekst": "Wariant *skala*", "wariant": "skala", "tlo": "plansza", "pozycja": "srodek" } },
+    { "szablon": "cta-koncowe", "start": 31.4, "czas": 3.4, "dane": {} }
+  ]
+}

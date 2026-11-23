@@ -1,0 +1,142 @@
+<!doctype html>
+<!--
+  cena-za-postacia: karta z ceną wysuwa się zza postaci (między tłem a wyciętą postacią),
+  potem kursor myszki klika w kartę i ta się otwiera, pokazując cenę.
+  Warstwy (z-index): nagranie (1) -> karta (2) -> wycięta postać (3) -> kursor (4).
+  Media podmienia skrypt zloz (data-slot-media), jak w tekst-za-postacia:
+    tlo      klip z proxy/ (ten sam co w wyciete/, ten sam początek: media_od)
+    wyciete  przezroczysty .webm z: npm run wytnij-tlo -- <projekt> proxy/X.mp4
+  Zmienne:
+    zabieg, pytanie (zamknięta karta), cena (po kliknięciu), dopisek (mały tekst pod ceną)
+    kadr_x, kadr_y, kadr_skala  ten sam stały kadr co w ujęciu (pole "kadr" w rolka.json), 0 = pełny kadr
+    gora    górna krawędź karty w px; wysun  skąd karta wyjeżdża (przesunięcie w px w prawo, za postacią)
+  Dźwięki (whoosh przy wysunięciu, klik myszki, ding przy cenie) dokłada zloz, czasy jak tutaj.
+-->
+<html
+  lang="pl"
+  data-composition-id="cena-za-postacia"
+  data-composition-duration="2.7"
+  data-composition-variables='[
+    {"id":"zabieg","type":"string","label":"Zabieg","default":"Termolifting"},
+    {"id":"pytanie","type":"string","label":"Tekst na zamkniętej karcie","default":"ile kosztuje?"},
+    {"id":"cena","type":"string","label":"Cena","default":"od 750 zł"},
+    {"id":"dopisek","type":"string","label":"Dopisek","default":""},
+    {"id":"kadr_x","type":"number","label":"Kadr x","default":0},
+    {"id":"kadr_y","type":"number","label":"Kadr y","default":0},
+    {"id":"kadr_skala","type":"number","label":"Kadr skala","default":0},
+    {"id":"gora","type":"number","label":"Góra karty (px)","default":700,"min":240,"max":1200,"step":10},
+    {"id":"wysun","type":"number","label":"Wysunięcie zza postaci (px)","default":460,"min":0,"max":900,"step":10}
+  ]'
+>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Cena zza postaci</title>
+  </head>
+  <body>
+    <template>
+      <div id="root" data-composition-id="cena-za-postacia" data-duration="2.7" data-fps="30">
+        <style>
+          #root { position: absolute; inset: 0; overflow: hidden; background: var(--tekst, #082032); font-family: var(--font-tekst, "Montserrat"), sans-serif; }
+          .czp-warstwa { position: absolute; inset: 0; overflow: hidden; }
+          .czp-in { position: absolute; left: 0; top: 0; width: 1080px; height: 1920px; transform-origin: 0 0; }
+          .czp-media { position: absolute; left: 0; top: 0; width: 1080px; height: 1920px; object-fit: cover; }
+          .czp-karta-clip { position: absolute; inset: 0; z-index: 2; }
+          .czp-karta {
+            position: absolute;
+            left: var(--safe-left, 60px);
+            width: 540px;
+            height: 170px;
+            overflow: hidden;
+            border-radius: 34px;
+            background: rgba(255, 255, 255, 0.95);
+            box-shadow: 0 22px 60px rgba(8, 32, 50, 0.18), inset 0 0 0 2px color-mix(in srgb, var(--akcent, #c8a15f) 45%, transparent);
+            text-align: center;
+          }
+          .czp-zabieg { margin-top: 28px; font-family: var(--font-naglowki, "Playfair Display"), serif; font-size: 60px; font-weight: 600; line-height: 1.1; color: var(--tekst, #082032); }
+          .czp-pyt { margin-top: 8px; font-size: 28px; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; color: var(--tekst-2, #6a7a8b); }
+          .czp-pyt b { display: inline-block; margin-left: 8px; color: var(--akcent, #c8a15f); }
+          .czp-rule { width: 110px; height: 3px; margin: 26px auto 0; border-radius: 2px; background: var(--akcent, #c8a15f); transform-origin: 50% 50%; }
+          .czp-cena { margin-top: 18px; font-family: var(--font-naglowki, "Playfair Display"), serif; font-style: italic; font-size: 124px; font-weight: 600; line-height: 1; color: var(--akcent, #c8a15f); white-space: nowrap; }
+          .czp-dop { margin-top: 14px; font-size: 24px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: var(--tekst-2, #6a7a8b); }
+          .czp-kursor-clip { position: absolute; inset: 0; z-index: 5; }
+          .czp-kursor { position: absolute; left: 0; top: 0; width: 74px; height: 92px; transform-origin: 8px 6px; filter: drop-shadow(0 6px 10px rgba(8, 32, 50, 0.35)); }
+          .czp-fala { position: absolute; left: -45px; top: -45px; width: 90px; height: 90px; border-radius: 50%; border: 5px solid var(--akcent, #c8a15f); }
+        </style>
+        <div class="czp-warstwa" style="z-index:1"><div id="cena-za-postacia-in1" class="czp-in">
+          <video id="cena-za-postacia-tlo" class="clip czp-media" data-slot-media="tlo" src="assets/demo/tlo.mp4" data-start="0" data-duration="2.7" data-track-index="0" muted playsinline></video>
+        </div></div>
+        <div id="cena-za-postacia-kclip" class="clip czp-karta-clip" data-start="0" data-duration="2.7" data-track-index="1" data-layout-allow-overflow>
+          <div id="cena-za-postacia-karta" class="czp-karta">
+            <div id="cena-za-postacia-zabieg" class="czp-zabieg"></div>
+            <div id="cena-za-postacia-pyt" class="czp-pyt"><span id="cena-za-postacia-pyt-t"></span><b id="cena-za-postacia-strz">▾</b></div>
+            <div id="cena-za-postacia-rule" class="czp-rule"></div>
+            <div id="cena-za-postacia-cena" class="czp-cena"></div>
+            <div id="cena-za-postacia-dop" class="czp-dop"></div>
+          </div>
+        </div>
+        <div class="czp-warstwa" style="z-index:3"><div id="cena-za-postacia-in2" class="czp-in">
+          <video id="cena-za-postacia-wyciete" class="clip czp-media" data-slot-media="wyciete" src="assets/demo/wyciete.webm" data-start="0" data-duration="2.7" data-track-index="2" muted playsinline data-layout-allow-occlusion></video>
+        </div></div>
+        <div id="cena-za-postacia-mclip" class="clip czp-kursor-clip" data-start="0" data-duration="2.7" data-track-index="3" data-layout-allow-overflow>
+          <div id="cena-za-postacia-mysz" style="position:absolute;left:0;top:0">
+            <div id="cena-za-postacia-fala" class="czp-fala"></div>
+            <svg id="cena-za-postacia-kursor" class="czp-kursor" viewBox="0 0 24 30"><path d="M2 1.5 L2 24 L8 18.6 L12 28 L16 26.3 L12 17 L20 17 Z" fill="#fff" stroke="#082032" stroke-width="1.6" stroke-linejoin="round" /></svg>
+          </div>
+        </div>
+        <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+        <script>
+          (function () {
+            var ID = "cena-za-postacia";
+            var $ = function (s) { return document.getElementById(ID + "-" + s); };
+            var D = parseFloat($("kclip").getAttribute("data-duration")) || 2.7;
+            var v = window.__hyperframes && window.__hyperframes.getVariables ? window.__hyperframes.getVariables() : {};
+            var num = function (x, d) { var n = Number(x); return isFinite(n) && n !== 0 ? n : d; };
+            $("zabieg").textContent = v.zabieg == null ? "Termolifting" : String(v.zabieg);
+            $("pyt-t").textContent = v.pytanie == null ? "ile kosztuje?" : String(v.pytanie);
+            $("cena").textContent = v.cena == null ? "od 750 zł" : String(v.cena);
+            $("dop").textContent = v.dopisek ? String(v.dopisek) : "";
+            // Stały kadr jak w ujęciu: punkt (x, y) nagrania w środku, powiększenie s. Tło i wycięcie muszą mieć ten sam.
+            var s = num(v.kadr_skala, 1), kx = num(v.kadr_x, 540), ky = num(v.kadr_y, 960);
+            var tr = "translate(" + (540 - s * kx) + "px, " + (960 - s * ky) + "px) scale(" + s + ")";
+            $("in1").style.transform = tr;
+            $("in2").style.transform = tr;
+            var gora = num(v.gora, 700), wysun = num(v.wysun, 460);
+            var karta = $("karta");
+            karta.style.top = gora + "px";
+            var ZAMK = 170, OTW = v.dopisek ? 400 : 362;
+            // Środek karty = cel kursora.
+            var cx = 60 + 270, cy = gora + 85;
+
+            var RUCH = (function () { var cs = getComputedStyle(document.documentElement), g = function (n, d) { var v = (cs.getPropertyValue(n) || "").trim().replace(/^["']|["']$/g, ""); return v || d; }; return { we: g("--ruch-wejscie", "power2.out"), wy: g("--ruch-wyjscie", "power2.in"), ak: g("--ruch-akcent", "back.out(2)"), pl: g("--ruch-plynny", "power2.inOut") }; })(); // styl ruchu marki (zloz: --ruch-*)
+            var tl = gsap.timeline({ paused: true });
+            // 1. Karta wysuwa się zza postaci (zaczyna schowana za wycięciem).
+            tl.fromTo(karta, { x: wysun, rotation: 4 }, { x: 0, rotation: 0, duration: 0.55, ease: RUCH.we }, 0.1);
+            // Gdy karta wyjdzie zza postaci, przechodzi na wierzch (nie chowa się już za ręką) z lekkim „podskokiem”.
+            tl.set($("kclip"), { zIndex: 2 }, 0);
+            tl.set($("kclip"), { zIndex: 4 }, 0.5);
+            tl.fromTo(karta, { scale: 1 }, { scale: 1.06, duration: 0.12, yoyo: true, repeat: 1, ease: RUCH.pl, immediateRender: false }, 0.5);
+            tl.fromTo($("strz"), { y: -4 }, { y: 4, duration: 0.3, yoyo: true, repeat: 3, ease: RUCH.pl }, 0.6);
+            // 2. Kursor wjeżdża z dołu i klika w kartę.
+            var T_KLIK = 1.2;
+            tl.fromTo($("mysz"), { x: 860, y: 1560, opacity: 0 }, { x: cx + 40, y: cy + 10, opacity: 1, duration: 0.5, ease: RUCH.we }, 0.62);
+            tl.to($("kursor"), { scale: 0.82, duration: 0.07, yoyo: true, repeat: 1, ease: RUCH.pl }, T_KLIK);
+            tl.fromTo($("fala"), { scale: 0.3, opacity: 0.9 }, { scale: 1.6, opacity: 0, duration: 0.45, ease: RUCH.we }, T_KLIK);
+            tl.to(karta, { scale: 0.96, duration: 0.07, yoyo: true, repeat: 1, ease: RUCH.pl }, T_KLIK);
+            // 3. Karta się otwiera: rośnie w dół, strzałka znika, cena wskakuje.
+            tl.to($("strz"), { opacity: 0, duration: 0.15 }, T_KLIK + 0.1);
+            tl.fromTo(karta, { height: ZAMK }, { height: OTW, duration: 0.42, ease: RUCH.ak, immediateRender: false }, T_KLIK + 0.12);
+            tl.fromTo($("rule"), { scaleX: 0 }, { scaleX: 1, duration: 0.35, ease: RUCH.pl }, T_KLIK + 0.2);
+            tl.fromTo($("cena"), { opacity: 0, y: 24, scale: 0.85 }, { opacity: 1, y: 0, scale: 1, duration: 0.4, ease: RUCH.ak }, T_KLIK + 0.28);
+            if (v.dopisek) tl.fromTo($("dop"), { opacity: 0 }, { opacity: 1, duration: 0.3 }, T_KLIK + 0.45);
+            // Kursor odjeżdża, żeby nie zasłaniał ceny.
+            tl.to($("mysz"), { x: 760, y: 1500, opacity: 0, duration: 0.45, ease: RUCH.wy }, T_KLIK + 0.45);
+            tl.to(karta, { opacity: 0, duration: 0.2, ease: RUCH.wy }, Math.max(T_KLIK + 0.9, D - 0.2));
+            tl.set({}, {}, D);
+            window.__timelines = window.__timelines || {};
+            window.__timelines[ID] = tl;
+          })();
+        </script>
+      </div>
+    </template>
+  </body>
+</html>

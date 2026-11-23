@@ -1,0 +1,30 @@
+<!doctype html>
+<!-- Szablon okładki. Wypełnia go scripts/okladka.mjs ({{...}}). Statyczna klatka, bez animacji. -->
+<html lang="pl" data-resolution="portrait">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1080, height=1920" />
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 1080px; height: 1920px; overflow: hidden; background: #000; }
+      #kadr { position: absolute; inset: 0; width: 1080px; height: 1920px; object-fit: cover; }
+      #cien { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,0) 35%, rgba(43,35,33,0.25) 100%); }
+      /* Środkowy kadr 3:4 (1080x1440, od y=240) widać w siatce profilu. Tytuł w jego środku. */
+      #box { position: absolute; left: 70px; right: 70px; top: 240px; height: 1440px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+      #karta { padding: 46px 52px 54px; border-radius: 40px; background: {{TLO}}; box-shadow: 0 24px 70px rgba(43,35,33,0.25); max-width: 100%; }
+      #kat { font-family: "{{FONT_T}}", sans-serif; font-size: 30px; font-weight: 600; letter-spacing: 0.24em; text-transform: uppercase; color: {{AKCENT}}; margin-bottom: 18px; }
+      #kat:empty { display: none; }
+      h1 { font-family: "{{FONT_N}}", serif; font-weight: 700; font-size: {{ROZMIAR}}px; line-height: 1.06; color: {{TEKST}}; }
+      h1 em { color: {{AKCENT}}; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="okladka" data-start="0" data-duration="1" data-width="1080" data-height="1920" data-no-timeline>
+      <img id="kadr" class="clip" src="assets/kadr.jpg" data-start="0" data-duration="1" data-track-index="0" alt="" />
+      <div id="cien" class="clip" data-start="0" data-duration="1" data-track-index="1"></div>
+      <div id="box" class="clip" data-start="0" data-duration="1" data-track-index="2">
+        <div id="karta"><div id="kat">{{KATEGORIA}}</div><h1>{{TYTUL}}</h1></div>
+      </div>
+    </div>
+  </body>
+</html>

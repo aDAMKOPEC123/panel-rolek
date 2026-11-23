@@ -1,0 +1,79 @@
+<!doctype html>
+<!--
+  lower-third: imię i rola/temat. Przestylowany blok z katalogu HyperFrames: lt-soft-pill
+  (npx hyperframes add lt-soft-pill). Zmiany: pion 1080x1920, kolory i fonty marki,
+  pozycja nad strefą przycisków IG (420 px od dołu + zapas na napisy), zmienne.
+  Zmienne: nazwa, rola
+-->
+<html
+  lang="pl"
+  data-composition-id="lower-third"
+  data-composition-duration="4"
+  data-composition-variables='[
+    {"id":"nazwa","type":"string","label":"Imię / nazwa","default":"Twoje imię"},
+    {"id":"rola","type":"string","label":"Rola / temat","default":"kosmetolożka i podolożka"}
+  ]'
+>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Lower third</title>
+  </head>
+  <body>
+    <template>
+      <div id="root" data-composition-id="lower-third" data-duration="4" data-fps="30">
+        <style>
+          #root { position: absolute; inset: 0; pointer-events: none; font-family: var(--font-tekst, "Montserrat"), sans-serif; }
+          .lt3-clip { position: absolute; inset: 0; }
+          .lt3 { position: absolute; left: var(--safe-left, 60px); top: 1340px; }
+          .lt3-pill {
+            display: flex;
+            align-items: center;
+            gap: 22px;
+            background: var(--bialy, #fff);
+            border-radius: 999px;
+            padding: 22px 44px 22px 28px;
+            box-shadow: 0 16px 46px rgba(43, 35, 33, 0.2);
+            transform-origin: 0% 100%;
+          }
+          .lt3-dot { width: 20px; height: 20px; border-radius: 50%; background: var(--akcent, #b07a6e); flex-shrink: 0; }
+          .lt3-text { display: flex; flex-direction: column; gap: 4px; }
+          .lt3-name { font-family: var(--font-naglowki, "Playfair Display"), serif; font-size: 50px; font-weight: 700; color: var(--tekst, #2b2321); line-height: 1.04; white-space: nowrap; }
+          .lt3-role { font-size: 28px; font-weight: 500; color: var(--akcent-2, #8c6b5d); line-height: 1.2; white-space: nowrap; }
+        </style>
+        <div id="lower-third-clip" class="clip lt3-clip" data-start="0" data-duration="4" data-track-index="0">
+          <div id="lower-third-wrap" class="lt3">
+            <div id="lower-third-pill" class="lt3-pill">
+              <div id="lower-third-dot" class="lt3-dot"></div>
+              <div class="lt3-text">
+                <div id="lower-third-name" class="lt3-name"></div>
+                <div id="lower-third-role" class="lt3-role"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+        <script>
+          (function () {
+            var ID = "lower-third";
+            var $ = function (s) { return document.getElementById(ID + "-" + s); };
+            var D = parseFloat($("clip").getAttribute("data-duration")) || 4;
+            var v = window.__hyperframes && window.__hyperframes.getVariables ? window.__hyperframes.getVariables() : {};
+            $("name").textContent = v.nazwa == null ? "Twoje imię" : String(v.nazwa);
+            $("role").textContent = v.rola == null ? "kosmetolożka i podolożka" : String(v.rola);
+            var RUCH = (function () { var cs = getComputedStyle(document.documentElement), g = function (n, d) { var v = (cs.getPropertyValue(n) || "").trim().replace(/^["']|["']$/g, ""); return v || d; }; return { we: g("--ruch-wejscie", "power2.out"), wy: g("--ruch-wyjscie", "power2.in"), ak: g("--ruch-akcent", "back.out(2)"), pl: g("--ruch-plynny", "power2.inOut") }; })(); // styl ruchu marki (zloz: --ruch-*)
+            var tl = gsap.timeline({ paused: true });
+            tl.fromTo($("pill"), { scale: 0.88, y: 18, opacity: 0 }, { scale: 1, y: 0, opacity: 1, duration: 0.55, ease: RUCH.ak }, 0.1);
+            tl.fromTo($("dot"), { scale: 0 }, { scale: 1, duration: 0.4, ease: RUCH.ak }, 0.4);
+            tl.fromTo($("name"), { opacity: 0, x: -10 }, { opacity: 1, x: 0, duration: 0.45, ease: RUCH.we }, 0.42);
+            tl.fromTo($("role"), { opacity: 0, x: -10 }, { opacity: 1, x: 0, duration: 0.45, ease: RUCH.we }, 0.5);
+            var out = Math.max(1.2, D - 0.45);
+            tl.to($("pill"), { scale: 0.94, y: 14, opacity: 0, duration: 0.35, ease: RUCH.wy }, out);
+            tl.set($("wrap"), { visibility: "hidden" }, Math.min(D - 0.01, out + 0.36));
+            window.__timelines = window.__timelines || {};
+            window.__timelines[ID] = tl;
+          })();
+        </script>
+      </div>
+    </template>
+  </body>
+</html>

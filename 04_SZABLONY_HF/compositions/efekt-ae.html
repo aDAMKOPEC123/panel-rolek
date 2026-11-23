@@ -1,0 +1,257 @@
+<!doctype html>
+<!--
+  efekt-ae: efekty jak z After Effects na nagraniu (przepisy z hyperframes-animation: svg-path-draw, particle-burst,
+  gradient-text-sweep, motion-blur-streak, depth-of-field-blur, 3d-text-depth-layers).
+  Efekty (zmienna efekt):
+    ramka        złota odręczna ramka rysuje się wokół punktu x,y (Trim Paths), opcjonalny podpis
+    strzalka     strzałka rysuje się od podpisu do punktu x,y
+    brokat       złote iskry wybuchają z punktu x,y i migoczą (bez tekstu albo z podpisem)
+    swiatlo      napis z przesuwającym się złotym połyskiem (światło przez litery)
+    smuga        napis wjeżdża z rozmyciem ruchu (motion blur) i staje ostry
+    glebia       tło rozmywa się jak przy płytkiej głębi ostrości, napis wyostrza się na pierwszym planie
+    tekst3d      napis z głębią 3D (warstwy) obraca się w perspektywie i staje na wprost
+    akwarela     miękkie plamy akwareli rozlewają się pod napisem
+  Zmienne: efekt, tekst (*słowo* = akcent, | = nowa linia), x, y (punkt w pikselach kadru 1080x1920),
+  promien (ramka), pozycja (gora|srodek|dol dla napisów), kolor (zloto|bialy|granat), rozmiar (px).
+  Ruch tylko w jednej pauzowanej osi GSAP; losowość z funkcji hash (render deterministyczny).
+-->
+<html
+  lang="pl"
+  data-composition-id="efekt-ae"
+  data-composition-duration="3"
+  data-composition-variables='[
+    {"id":"efekt","type":"enum","label":"Efekt","default":"ramka","options":[{"value":"ramka","label":"Ramka rysowana wokół detalu"},{"value":"strzalka","label":"Strzałka rysowana do detalu"},{"value":"brokat","label":"Złote iskry (brokat)"},{"value":"swiatlo","label":"Połysk światła na napisie"},{"value":"smuga","label":"Napis z rozmyciem ruchu"},{"value":"glebia","label":"Głębia ostrości (rozmyte tło)"},{"value":"tekst3d","label":"Napis 3D"},{"value":"akwarela","label":"Akwarela pod napisem"}]},
+    {"id":"tekst","type":"string","label":"Tekst / podpis","default":"efekt *po 1 zabiegu*"},
+    {"id":"x","type":"number","label":"Punkt X (px, 0-1080)","default":540,"min":0,"max":1080,"step":5},
+    {"id":"y","type":"number","label":"Punkt Y (px, 0-1920)","default":820,"min":0,"max":1920,"step":5},
+    {"id":"promien","type":"number","label":"Wielkość ramki (px)","default":170,"min":60,"max":420,"step":5},
+    {"id":"pozycja","type":"enum","label":"Pozycja napisu","default":"srodek","options":[{"value":"gora","label":"Góra"},{"value":"srodek","label":"Środek"},{"value":"dol","label":"Dół (nad napisami)"}]},
+    {"id":"kolor","type":"enum","label":"Kolor","default":"zloto","options":[{"value":"zloto","label":"Złoto (akcent)"},{"value":"bialy","label":"Biały"},{"value":"granat","label":"Granat"}]},
+    {"id":"rozmiar","type":"number","label":"Rozmiar liter (px)","default":84,"min":40,"max":150,"step":2}
+  ]'
+>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Efekt jak z AE</title>
+  </head>
+  <body>
+    <template>
+      <div id="root" data-composition-id="efekt-ae" data-duration="3" data-fps="30">
+        <style>
+          #root { position: absolute; inset: 0; pointer-events: none; overflow: hidden; font-family: var(--font-naglowki, "Playfair Display"), serif; }
+          .ae-clip { position: absolute; inset: 0; }
+          .ae-warstwa { position: absolute; inset: 0; }
+          .ae-svg { position: absolute; left: 0; top: 0; width: 1080px; height: 1920px; overflow: visible; }
+          .ae-svg path { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+          .ae-txt { position: absolute; left: var(--safe-left, 60px); right: var(--safe-right, 140px); display: flex; justify-content: center; text-align: center; }
+          .ae-txt.gora { top: calc(var(--safe-top, 220px) + 120px); }
+          .ae-txt.srodek { top: 50%; transform: translateY(-50%); }
+          .ae-txt.dol { top: 1150px; }
+          .ae-t { position: relative; font-weight: 600; line-height: 1.1; color: #fff; text-shadow: 0 6px 26px rgba(0, 0, 0, 0.42); }
+          .ae-t em { font-style: italic; color: var(--ae-kol); text-shadow: 0 2px 5px rgba(0, 0, 0, 0.4), 0 6px 22px rgba(0, 0, 0, 0.38); }
+          .ae-podpis { position: absolute; font-family: var(--font-tekst, "Montserrat"), sans-serif; font-weight: 700; font-size: 40px; white-space: nowrap; color: #fff; padding: 10px 26px; border-radius: 999px; background: var(--ae-kol); box-shadow: 0 10px 30px rgba(8, 32, 50, 0.28); }
+          .ae-podpis.bialy-tlo { color: var(--tekst, #082032); }
+          .ae-iskra { position: absolute; left: 0; top: 0; border-radius: 50%; background: radial-gradient(circle, #fff 0 18%, var(--ae-kol) 45%, transparent 72%); }
+          .ae-gwiazda { position: absolute; left: 0; top: 0; width: 46px; height: 46px; margin: -23px 0 0 -23px; }
+          .ae-gwiazda svg { width: 100%; height: 100%; display: block; }
+          .ae-swiatlo { background-image: linear-gradient(100deg, #ffffff 0%, #ffffff 36%, var(--ae-kol) 45%, #fff6d8 50%, var(--ae-kol) 55%, #ffffff 64%, #ffffff 100%); background-size: 300% 100%; background-position: 100% 50%; -webkit-background-clip: text; background-clip: text; color: transparent !important; text-shadow: none; filter: drop-shadow(0 6px 18px rgba(0, 0, 0, 0.38)); }
+          .ae-swiatlo em { color: transparent; }
+          .ae-rozmycie { position: absolute; inset: 0; backdrop-filter: blur(0px); -webkit-backdrop-filter: blur(0px); background: rgba(8, 32, 50, 0); }
+          .ae-scena3d { perspective: 1100px; }
+          .ae-3d { position: relative; transform-style: preserve-3d; }
+          .ae-3d .ae-w { position: absolute; left: 0; top: 0; width: 100%; color: var(--ae-kol); text-shadow: none; }
+          .ae-plama { position: absolute; border-radius: 50%; filter: blur(30px); }
+        </style>
+        <div id="efekt-ae-clip" class="clip ae-clip" data-start="0" data-duration="3" data-track-index="0">
+          <div id="efekt-ae-tlo" class="ae-warstwa"></div>
+          <svg id="efekt-ae-svg" class="ae-svg" viewBox="0 0 1080 1920">
+            <defs>
+              <filter id="efekt-ae-smuga" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur id="efekt-ae-smuga-blur" in="SourceGraphic" stdDeviation="0 0" /></filter>
+            </defs>
+            <path id="efekt-ae-p1" />
+            <path id="efekt-ae-p2" />
+            <path id="efekt-ae-p3" />
+          </svg>
+          <div id="efekt-ae-iskry" class="ae-warstwa"></div>
+          <div id="efekt-ae-txt" class="ae-txt srodek"><div id="efekt-ae-t" class="ae-t"></div></div>
+          <div id="efekt-ae-podpis" class="ae-podpis"></div>
+        </div>
+        <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+        <script>
+          (function () {
+            var ID = "efekt-ae";
+            var $ = function (s) { return document.getElementById(ID + "-" + s); };
+            var clip = $("clip");
+            var D = parseFloat(clip.getAttribute("data-duration")) || 3;
+            var v = window.__hyperframes && window.__hyperframes.getVariables ? window.__hyperframes.getVariables() : {};
+            var efekt = v.efekt || "ramka";
+            var tekst = v.tekst == null ? "efekt *po 1 zabiegu*" : String(v.tekst);
+            var X = Number(v.x != null && v.x !== "" ? v.x : 540), Y = Number(v.y != null && v.y !== "" ? v.y : 820);
+            var R = Number(v.promien) || 170;
+            var rozmiar = Number(v.rozmiar) || 84;
+            var KOL = { zloto: "var(--akcent, #C8A15F)", bialy: "#ffffff", granat: "var(--granat, #0B4178)" }[v.kolor || "zloto"] || "var(--akcent, #C8A15F)";
+            clip.style.setProperty("--ae-kol", KOL);
+            var prand = function (n) { var s = Math.sin(n * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); };
+            var esc = function (s) { return s.replace(/[&<>]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]; }); };
+            var htmlTekstu = function (t) {
+              return t.split("|").map(function (l) { return esc(l.trim()).replace(/\*([^*]+)\*/g, "<em>$1</em>"); }).join("<br>");
+            };
+            var czysty = tekst.replace(/\*/g, "").trim();
+            var RUCH = (function () { var cs = getComputedStyle(document.documentElement), g = function (n, d) { var v = (cs.getPropertyValue(n) || "").trim().replace(/^["']|["']$/g, ""); return v || d; }; return { we: g("--ruch-wejscie", "power2.out"), wy: g("--ruch-wyjscie", "power2.in"), ak: g("--ruch-akcent", "back.out(2)"), pl: g("--ruch-plynny", "power2.inOut") }; })(); // styl ruchu marki (zloz: --ruch-*)
+            var tl = gsap.timeline({ paused: true });
+            var out = Math.max(0.9, D - 0.35);
+            var t = $("t"), txt = $("txt"), podpis = $("podpis");
+            txt.className = "ae-txt " + (v.pozycja || "srodek");
+            t.style.fontSize = rozmiar + "px";
+            t.innerHTML = htmlTekstu(tekst);
+            podpis.style.display = "none";
+            if (v.kolor === "bialy") podpis.classList.add("bialy-tlo");
+            var rysuj = function (p, d, szer, t0, dur, ease) {
+              p.setAttribute("d", d);
+              p.setAttribute("stroke", v.kolor === "bialy" ? "#ffffff" : v.kolor === "granat" ? "#0B4178" : getComputedStyle(clip).getPropertyValue("--akcent").trim() || "#C8A15F");
+              p.setAttribute("stroke-width", szer);
+              p.style.filter = "drop-shadow(0 3px 8px rgba(0,0,0,0.35))";
+              var L = p.getTotalLength ? p.getTotalLength() : 1500;
+              tl.fromTo(p, { strokeDasharray: L, strokeDashoffset: L }, { strokeDashoffset: 0, duration: dur, ease: ease || "power2.inOut" }, t0);
+            };
+            // Podpis obok punktu, zawsze w safe zone
+            var pokazPodpis = function (px, py, t0) {
+              if (!czysty) return;
+              podpis.style.display = "block";
+              podpis.innerHTML = htmlTekstu(tekst).replace(/<\/?em>/g, "");
+              podpis.style.fontSize = Math.round(rozmiar * 0.5) + "px";
+              var w = podpis.offsetWidth || 300, h = podpis.offsetHeight || 60;
+              var lx = Math.min(1080 - 140 - w, Math.max(60, px - w / 2));
+              var ly = Math.min(1920 - 420 - h, Math.max(220, py - h / 2));
+              podpis.style.left = lx + "px"; podpis.style.top = ly + "px";
+              tl.fromTo(podpis, { opacity: 0, scale: 0.6, y: 14 }, { opacity: 1, scale: 1, y: 0, duration: 0.42, ease: RUCH.ak }, t0);
+              return { x: lx, y: ly, w: w, h: h };
+            };
+            var zostawTekst = function () { txt.style.display = "none"; };
+
+            if (efekt === "ramka") {
+              zostawTekst();
+              // odręczna elipsa: punkty z lekkim drżeniem, zachodzi na siebie na końcu (jak pociągnięcie pędzla)
+              var pts = [], N = 44;
+              for (var i = 0; i <= N + 6; i++) {
+                var a = -Math.PI * 0.62 + (i / N) * Math.PI * 2;
+                // płynne „drżenie ręki”: dwie łagodne fale zamiast szumu na każdym punkcie
+                var rr = R * (1 + 0.035 * Math.sin(a * 2 + 1.3) + 0.02 * Math.sin(a * 5 + 0.4) + i * 0.0012);
+                pts.push([X + Math.cos(a) * rr * 1.08, Y + Math.sin(a) * rr * 0.86]);
+              }
+              var d = "M " + pts[0][0].toFixed(1) + " " + pts[0][1].toFixed(1);
+              for (var k = 1; k < pts.length; k++) d += " L " + pts[k][0].toFixed(1) + " " + pts[k][1].toFixed(1);
+              rysuj($("p1"), d, 9, 0.15, 0.85, "power2.inOut");
+              var ponizej = Y + R * 0.86 + 40;
+              pokazPodpis(X, ponizej > 1920 - 520 ? Y - R * 0.86 - 70 : ponizej + 30, 0.85);
+              tl.to([$("p1"), podpis], { opacity: 0, duration: 0.3, ease: RUCH.wy }, out);
+            } else if (efekt === "strzalka") {
+              zostawTekst();
+              var gora = Y > 960;
+              var pp = pokazPodpis(Math.min(820, Math.max(260, X + (X < 540 ? 180 : -180))), gora ? Y - 380 : Y + 380, 0.05) || { x: X - 150, y: gora ? Y - 380 : Y + 380, w: 300, h: 60 };
+              var sx = pp.x + pp.w / 2, sy = gora ? pp.y + pp.h + 18 : pp.y - 18;
+              var ex = X + (sx < X ? -26 : 26) * 0.4, ey = Y + (gora ? -46 : 46);
+              var cx = (sx + ex) / 2 + (sx < ex ? -120 : 120), cy = (sy + ey) / 2;
+              rysuj($("p1"), "M " + sx + " " + sy + " Q " + cx + " " + cy + " " + ex + " " + ey, 8, 0.45, 0.55, "power2.out");
+              var kat = Math.atan2(ey - cy, ex - cx), g = 34;
+              var grot = "M " + (ex - g * Math.cos(kat - 0.5)) + " " + (ey - g * Math.sin(kat - 0.5)) + " L " + ex + " " + ey + " L " + (ex - g * Math.cos(kat + 0.5)) + " " + (ey - g * Math.sin(kat + 0.5));
+              rysuj($("p2"), grot, 8, 0.98, 0.2, "power1.out");
+              tl.to([$("p1"), $("p2"), podpis], { opacity: 0, duration: 0.3, ease: RUCH.wy }, out);
+            } else if (efekt === "brokat") {
+              zostawTekst();
+              var box = $("iskry"), ISKRY = 34, GW = 9;
+              var stan = { T: 0 }, iskry = [];
+              for (var j = 0; j < ISKRY; j++) {
+                var el = document.createElement("div"); el.className = "ae-iskra";
+                var sz = 8 + prand(j * 3.1) * 16; el.style.width = el.style.height = sz + "px";
+                box.appendChild(el);
+                var ang = prand(j * 7.3) * Math.PI * 2, sp = 380 + prand(j * 1.7) * 520;
+                iskry.push({ el: el, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp - 260, s: sz });
+              }
+              var FL = Math.min(1.6, D - 0.4), G = 900;
+              var ustaw = function () {
+                var tt = stan.T * FL;
+                iskry.forEach(function (p) {
+                  var px = X + p.vx * tt * (1 - stan.T * 0.45), py = Y + p.vy * tt * (1 - stan.T * 0.45) + 0.5 * G * tt * tt;
+                  p.el.style.transform = "translate(" + (px - p.s / 2) + "px," + (py - p.s / 2) + "px)";
+                  p.el.style.opacity = stan.T < 0.02 ? 0 : Math.max(0, 1 - Math.max(0, stan.T - 0.55) / 0.45);
+                });
+              };
+              ustaw();
+              tl.to(stan, { T: 1, duration: FL, ease: "none", onUpdate: ustaw }, 0.1);
+              // migoczące gwiazdki wokół punktu (4 ramiona, jak „sparkle” z AE)
+              for (var q = 0; q < GW; q++) {
+                var gw = document.createElement("div"); gw.className = "ae-gwiazda";
+                gw.innerHTML = '<svg viewBox="0 0 40 40"><path d="M20 0 C21 14 26 19 40 20 C26 21 21 26 20 40 C19 26 14 21 0 20 C14 19 19 14 20 0Z" fill="#fff" style="filter:drop-shadow(0 0 6px ' + "rgba(255,226,160,0.95)" + ')"/></svg>';
+                var ga = prand(q * 5.9) * Math.PI * 2, gr = 60 + prand(q * 2.3) * 220;
+                gw.style.left = X + Math.cos(ga) * gr + "px"; gw.style.top = Y + Math.sin(ga) * gr + "px";
+                box.appendChild(gw);
+                var gt = 0.15 + prand(q * 4.1) * Math.max(0.3, D - 1.2);
+                tl.fromTo(gw, { scale: 0, rotation: -40, opacity: 0 }, { scale: 0.6 + prand(q) * 0.9, rotation: 20, opacity: 1, duration: 0.28, ease: RUCH.ak }, gt);
+                tl.to(gw, { scale: 0, rotation: 70, opacity: 0, duration: 0.35, ease: RUCH.wy }, gt + 0.3);
+              }
+              if (czysty) pokazPodpis(X, Y > 1100 ? Y - 330 : Y + 300, 0.5);
+              tl.to(podpis, { opacity: 0, duration: 0.3 }, out);
+            } else if (efekt === "swiatlo") {
+              t.classList.add("ae-swiatlo");
+              tl.fromTo(t, { opacity: 0, y: 26, scale: 0.97 }, { opacity: 1, y: 0, scale: 1, duration: 0.5, ease: RUCH.we }, 0);
+              tl.fromTo(t, { backgroundPosition: "100% 50%" }, { backgroundPosition: "0% 50%", duration: Math.max(0.9, Math.min(1.6, D - 1)), ease: RUCH.pl }, 0.35);
+              tl.to(t, { opacity: 0, y: -16, duration: 0.3, ease: RUCH.wy }, out);
+            } else if (efekt === "smuga") {
+              var blur = $("smuga-blur"), bp = { v: 60 };
+              var pisz = function () { blur.setAttribute("stdDeviation", bp.v.toFixed(1) + " 0"); };
+              pisz();
+              t.style.filter = "url(#efekt-ae-smuga)";
+              tl.fromTo(t, { x: -1100, opacity: 0 }, { x: 0, opacity: 1, duration: 0.55, ease: RUCH.we }, 0.05);
+              tl.to(bp, { v: 0, duration: 0.55, ease: RUCH.we, onUpdate: pisz }, 0.05);
+              tl.set(t, { filter: "none" }, 0.61); // po zatrzymaniu bez filtra: litery idealnie ostre
+              tl.fromTo(t, { scale: 1 }, { scale: 1.04, duration: 0.18, yoyo: true, repeat: 1, ease: RUCH.pl }, 0.6);
+              tl.to(t, { opacity: 0, duration: 0.28, ease: RUCH.wy }, out);
+            } else if (efekt === "glebia") {
+              var roz = document.createElement("div"); roz.className = "ae-rozmycie"; $("tlo").appendChild(roz);
+              tl.fromTo(roz, { backdropFilter: "blur(0px)", webkitBackdropFilter: "blur(0px)", backgroundColor: "rgba(8,32,50,0)" }, { backdropFilter: "blur(14px)", webkitBackdropFilter: "blur(14px)", backgroundColor: "rgba(8,32,50,0.18)", duration: 0.7, ease: RUCH.pl }, 0);
+              tl.fromTo(t, { opacity: 0, scale: 1.18, filter: "blur(18px)" }, { opacity: 1, scale: 1, filter: "blur(0px)", duration: 0.75, ease: RUCH.we }, 0.2);
+              tl.to(roz, { backdropFilter: "blur(0px)", webkitBackdropFilter: "blur(0px)", backgroundColor: "rgba(8,32,50,0)", duration: 0.35, ease: RUCH.wy }, out);
+              tl.to(t, { opacity: 0, filter: "blur(10px)", duration: 0.3, ease: RUCH.wy }, out);
+            } else if (efekt === "tekst3d") {
+              txt.classList.add("ae-scena3d");
+              var html = htmlTekstu(tekst), WARSTWY = 9;
+              t.classList.add("ae-3d");
+              t.innerHTML = '<div style="position:relative">' + html + "</div>";
+              for (var w = WARSTWY; w >= 1; w--) {
+                var lay = document.createElement("div"); lay.className = "ae-w"; lay.innerHTML = html;
+                lay.style.transform = "translateZ(" + -w * 3 + "px)";
+                lay.style.opacity = 0.9 - w * 0.06;
+                lay.style.filter = "brightness(" + (0.55 - w * 0.03) + ")";
+                t.insertBefore(lay, t.firstChild);
+              }
+              tl.fromTo(t, { opacity: 0, rotationY: -55, rotationX: 18, z: -300 }, { opacity: 1, rotationY: 0, rotationX: 0, z: 0, duration: 0.9, ease: RUCH.we }, 0.05);
+              tl.to(t, { rotationY: 8, rotationX: -4, duration: Math.max(0.5, out - 1), ease: RUCH.pl }, 0.95);
+              tl.to(t, { opacity: 0, rotationY: 30, z: -200, duration: 0.3, ease: RUCH.wy }, out);
+            } else if (efekt === "akwarela") {
+              var tlo = $("tlo"), PL = 5, kolory = ["var(--nude, #F0E2DB)", "var(--zloto-jasne, #D7BD89)", "var(--akwarela, #A9BCCB)", "var(--nude, #F0E2DB)", "var(--tlo-jasne, #F9F5F3)"];
+              var cy = { gora: 520, srodek: 960, dol: 1260 }[v.pozycja || "srodek"];
+              for (var m = 0; m < PL; m++) {
+                var pl = document.createElement("div"); pl.className = "ae-plama";
+                var sw = 420 + prand(m * 2.7) * 360, sh = sw * (0.55 + prand(m * 9.1) * 0.35);
+                pl.style.width = sw + "px"; pl.style.height = sh + "px";
+                pl.style.left = 540 - sw / 2 + (prand(m * 3.3) - 0.5) * 360 + "px"; pl.style.top = cy - sh / 2 + (prand(m * 6.1) - 0.5) * 220 + "px";
+                pl.style.background = "radial-gradient(ellipse at " + (35 + prand(m) * 30) + "% " + (35 + prand(m * 2) * 30) + "%, " + kolori(kolory[m % kolory.length]) + ")";
+                tlo.appendChild(pl);
+                tl.fromTo(pl, { scale: 0.15, opacity: 0, rotation: prand(m * 4) * 40 - 20 }, { scale: 1, opacity: 0.72, rotation: 0, duration: 0.9 + prand(m * 5) * 0.5, ease: RUCH.we }, m * 0.09);
+              }
+              t.style.color = "var(--tekst, #082032)"; t.style.textShadow = "none";
+              tl.fromTo(t, { opacity: 0, y: 22, filter: "blur(6px)" }, { opacity: 1, y: 0, filter: "blur(0px)", duration: 0.6, ease: RUCH.we }, 0.45);
+              tl.to([tlo, t], { opacity: 0, duration: 0.35, ease: RUCH.wy }, out);
+            }
+            function kolori(c) { return c + " 0%, " + c + " 45%, transparent 72%"; }
+            tl.set(clip, { visibility: "hidden" }, Math.max(0, D - 0.01));
+            tl.set({}, {}, D);
+            window.__timelines = window.__timelines || {};
+            window.__timelines[ID] = tl;
+          })();
+        </script>
+      </div>
+    </template>
+  </body>
+</html>

@@ -1,0 +1,130 @@
+<!doctype html>
+<!--
+  zdjecie-3d: zdjęcie „ożywa” w 2,5D. Mapa głębi (scripts/glebia.py, Depth Anything V2 Small) przesuwa każdy
+  piksel proporcjonalnie do bliskości (filtr SVG feDisplacementMap), więc przy ruchu kamery bliższe rzeczy jadą
+  bardziej niż tło. Ruch jest ciągły: twarz nie kroi się na warstwy.
+  Media (data-slot-media, podmienia zloz): zdjecie (kadr 9:16), przod (postać z głębi, RGBA), mapa_najazd, mapa_przesuw.
+  Bez map (zloz nie policzył głębi) scena robi zwykły powolny najazd.
+  Zmienne:
+    ruch      najazd | odjazd | przesuw
+    sila      0,3-2 (domyślnie 1): jak mocno widać głębię
+    ostrosc   brak | na_postac (tło się rozmywa) | na_tlo | przeskok (z tła na postać)
+    tekst     opcjonalny, *słowo* = akcent; tekst_za = schowany za postacią; tekst_y = wysokość (px od góry)
+  Krzywe ruchu: styl marki (var RUCH, zmienne --ruch-*).
+-->
+<html
+  lang="pl"
+  data-composition-id="zdjecie-3d"
+  data-composition-duration="4"
+  data-composition-variables='[
+    {"id":"ruch","type":"enum","label":"Ruch kamery","default":"najazd","options":[{"value":"najazd","label":"Najazd w głąb"},{"value":"odjazd","label":"Odjazd"},{"value":"przesuw","label":"Przesuw w bok"}]},
+    {"id":"sila","type":"number","label":"Siła głębi","default":1,"min":0.3,"max":2,"step":0.1},
+    {"id":"ostrosc","type":"enum","label":"Ostrość","default":"brak","options":[{"value":"brak","label":"Bez zmiany"},{"value":"na_postac","label":"Na postać (tło się rozmywa)"},{"value":"na_tlo","label":"Na tło"},{"value":"przeskok","label":"Przeskok z tła na postać"}]},
+    {"id":"tekst","type":"string","label":"Tekst (opcjonalnie, *słowo* = akcent)","default":""},
+    {"id":"tekst_za","type":"boolean","label":"Tekst schowany za postacią","default":true},
+    {"id":"tekst_y","type":"number","label":"Wysokość tekstu (px od góry)","default":520,"min":220,"max":1400,"step":10},
+    {"id":"glebia","type":"boolean","label":"Mapy głębi gotowe (ustawia zloz)","default":false}
+  ]'
+>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Zdjęcie 3D</title>
+  </head>
+  <body>
+    <template>
+      <div id="root" data-composition-id="zdjecie-3d" data-duration="4" data-fps="30">
+        <style>
+          #root { position: absolute; inset: 0; overflow: hidden; background: var(--tlo-jasne, #f7f1ec); }
+          .z3-clip, .z3-kamera, .z3-w { position: absolute; inset: 0; }
+          .z3-kamera { transform-origin: 50% 45%; }
+          .z3-w img { position: absolute; left: 0; top: 0; width: 1080px; height: 1920px; object-fit: cover; }
+          .z3-mapa { display: none; }
+          .z3-tekst { position: absolute; left: var(--safe-left, 60px); right: var(--safe-right, 140px); text-align: center;
+            font-family: var(--font-naglowki, "Playfair Display"), serif; font-weight: 700; font-size: 104px; line-height: 1.02;
+            color: var(--bialy, #fff); text-shadow: 0 6px 30px rgba(0, 0, 0, 0.35); letter-spacing: -0.01em; }
+          .z3-tekst em { font-style: italic; color: var(--zloto-jasne, var(--akcent, #b07a6e)); }
+        </style>
+        <svg width="0" height="0" style="position:absolute">
+          <defs>
+            <filter id="zdjecie-3d-f" filterUnits="userSpaceOnUse" x="-60" y="-60" width="1200" height="2040" color-interpolation-filters="sRGB">
+              <feImage id="zdjecie-3d-fi" x="0" y="0" width="1080" height="1920" preserveAspectRatio="none" result="mapa" />
+              <feDisplacementMap id="zdjecie-3d-fd" in="SourceGraphic" in2="mapa" scale="0" xChannelSelector="R" yChannelSelector="G" />
+            </filter>
+          </defs>
+        </svg>
+        <div id="zdjecie-3d-clip" class="clip z3-clip" data-start="0" data-duration="4" data-track-index="0">
+          <div id="zdjecie-3d-kamera" class="z3-kamera">
+            <div id="zdjecie-3d-baza" class="z3-w"><img id="zdjecie-3d-img" data-slot-media="zdjecie" src="assets/demo/przed.jpg" alt="" /></div>
+            <div id="zdjecie-3d-tekst-za" class="z3-tekst"></div>
+            <div id="zdjecie-3d-przod" class="z3-w"><img id="zdjecie-3d-pimg" data-slot-media="przod" src="assets/demo/po.jpg" alt="" /></div>
+          </div>
+          <div id="zdjecie-3d-tekst-nad" class="z3-tekst"></div>
+          <img id="zdjecie-3d-mn" class="z3-mapa" data-slot-media="mapa_najazd" src="assets/demo/avatar.jpg" alt="" />
+          <img id="zdjecie-3d-mp" class="z3-mapa" data-slot-media="mapa_przesuw" src="assets/demo/watermark.png" alt="" />
+        </div>
+        <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+        <script>
+          (function () {
+            var ID = "zdjecie-3d";
+            var $ = function (s) { return document.getElementById(ID + "-" + s); };
+            var clip = $("clip");
+            var D = parseFloat(clip.getAttribute("data-duration")) || 4;
+            var v = window.__hyperframes && window.__hyperframes.getVariables ? window.__hyperframes.getVariables() : {};
+            var ruch = ["najazd", "odjazd", "przesuw"].indexOf(v.ruch) >= 0 ? v.ruch : "najazd";
+            var sila = Math.max(0.3, Math.min(2, Number(v.sila) || 1));
+            var ostrosc = String(v.ostrosc || "brak");
+            // mapy głębi: bez nich (placeholder z szablonu) zwykły najazd, bez filtra i bez warstwy przodu
+            var mapa = (ruch === "przesuw" ? $("mp") : $("mn")).getAttribute("src") || "";
+            // runtime podmienia src na data: URI, więc o mapach mówi zmienna ustawiana przez zloz, nie nazwa pliku
+            var maMapy = (v.glebia === true || v.glebia === "true") && !!mapa;
+            if (maMapy) {
+              $("fi").setAttribute("href", mapa);
+              $("img").style.filter = "url(#" + ID + "-f)";
+              $("pimg").style.filter = "url(#" + ID + "-f)";
+            } else {
+              $("przod").style.display = "none";
+            }
+            // tekst: *słowo* = akcent; za postacią albo nad wszystkim
+            var tekst = String(v.tekst || "").trim();
+            var za = maMapy && v.tekst_za !== false && v.tekst_za !== "false";
+            var el = za ? $("tekst-za") : $("tekst-nad");
+            if (tekst) {
+              el.innerHTML = tekst.replace(/[<>&]/g, "").replace(/\*(.+?)\*/g, "<em>$1</em>").replace(/\|/g, "<br>");
+              el.style.top = Math.max(220, Math.min(1400, Number(v.tekst_y) || 520)) + "px";
+            }
+
+            var RUCH = (function () { var cs = getComputedStyle(document.documentElement), g = function (n, d) { var v = (cs.getPropertyValue(n) || "").trim().replace(/^["']|["']$/g, ""); return v || d; }; return { we: g("--ruch-wejscie", "power2.out"), wy: g("--ruch-wyjscie", "power2.in"), ak: g("--ruch-akcent", "back.out(2)"), pl: g("--ruch-plynny", "power2.inOut") }; })(); // styl ruchu marki (zloz: --ruch-*)
+            var tl = gsap.timeline({ paused: true });
+            var S = 64 * sila; // maks. przesunięcie w px
+            var kam = $("kamera"), fd = $("fd");
+            tl.fromTo(clip, { opacity: 0 }, { opacity: 1, duration: 0.25, ease: RUCH.we }, 0);
+            if (ruch === "przesuw") {
+              tl.set(kam, { scale: 1.07 }, 0);
+              if (maMapy) tl.fromTo(fd, { attr: { scale: -S } }, { attr: { scale: S }, duration: D, ease: RUCH.pl }, 0);
+              tl.fromTo(kam, { x: 14 * sila }, { x: -14 * sila, duration: D, ease: RUCH.pl }, 0);
+            } else {
+              var od = ruch === "najazd" ? 0 : 1, doo = 1 - od;
+              tl.fromTo(kam, { scale: 1.05 + 0.07 * od * sila }, { scale: 1.05 + 0.07 * doo * sila, duration: D, ease: RUCH.pl }, 0);
+              if (maMapy) tl.fromTo(fd, { attr: { scale: S * od } }, { attr: { scale: S * doo }, duration: D, ease: RUCH.pl }, 0);
+            }
+            // ostrość z głębi: rozmyta warstwa bazy (tło) albo przodu (postać)
+            var B = 9 * Math.min(1.4, sila), t0 = Math.min(0.5, D * 0.15), dl = Math.min(1.3, D * 0.45);
+            if (maMapy && ostrosc === "na_postac") tl.fromTo($("baza"), { filter: "blur(0px)" }, { filter: "blur(" + B + "px)", duration: dl, ease: RUCH.pl }, t0);
+            if (maMapy && ostrosc === "na_tlo") tl.fromTo($("przod"), { filter: "blur(0px)" }, { filter: "blur(" + B * 0.8 + "px)", duration: dl, ease: RUCH.pl }, t0);
+            if (maMapy && ostrosc === "przeskok") {
+              tl.fromTo($("przod"), { filter: "blur(" + B * 0.8 + "px)" }, { filter: "blur(0px)", duration: dl, ease: RUCH.pl }, t0 + 0.4);
+              tl.fromTo($("baza"), { filter: "blur(0px)" }, { filter: "blur(" + B + "px)", duration: dl, ease: RUCH.pl }, t0 + 0.4);
+            }
+            if (tekst) {
+              tl.fromTo(el, { opacity: 0, y: za ? 60 : 24 }, { opacity: 1, y: 0, duration: 0.7, ease: RUCH.we }, 0.3);
+              tl.to(el, { opacity: 0, duration: 0.3, ease: RUCH.wy }, Math.max(1.2, D - 0.35));
+            }
+            tl.set({}, {}, D);
+            window.__timelines = window.__timelines || {};
+            window.__timelines[ID] = tl;
+          })();
+        </script>
+      </div>
+    </template>
+  </body>
+</html>
