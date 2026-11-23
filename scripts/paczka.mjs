@@ -18,7 +18,7 @@ if (zmiany) uwaga(`Masz niezapisane zmiany w ${zmiany.split("\n").length} plikac
 // pliki dokładane do paczki (poza repozytorium)
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "paczka-"));
 const instr = path.join(tmp, "JAK_ZAINSTALOWAC.txt");
-fs.writeFileSync(instr, `PANEL ROLEK: instalacja (Windows)
+fs.writeFileSync(instr, "﻿" + `PANEL ROLEK: instalacja (Windows)
 ==================================
 
 Do uruchomienia potrzebujesz KODU LICENCYJNEGO (ROLKI-XXXX-XXXX-XXXX), który dostałaś razem z tą paczką.
@@ -54,7 +54,7 @@ Twoje nagrania, rolki, ustawienia i aktywacja zostają, bo nie ma ich w paczce.
 Kodu licencyjnego nie udostępniaj innym osobom.
 `.replace(/\n/g, "\r\n"));
 const wersja = path.join(tmp, "WERSJA.txt");
-fs.writeFileSync(wersja, `Panel rolek, wersja ${sha} z ${dataCommita} (paczka z ${dzis()})\r\n`);
+fs.writeFileSync(wersja, "﻿" + `Panel rolek, wersja ${sha} z ${dataCommita} (paczka z ${dzis()})\r\n`);
 
 const out = path.join(os.homedir(), "Desktop", `panel-rolek_${dzis()}.zip`);
 fs.rmSync(out, { force: true });
