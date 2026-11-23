@@ -4,17 +4,21 @@
 //   npm run plan -- [--od RRRR-MM-DD] [--nastepny] [--dni pn,sr,pt] [--uwagi "tekst"] [--scenariusze] [--dopracuj]
 //   npm run plan -- --od RRRR-MM-DD --zamien RRRR-MM-DD [--uwagi "..."]   (nowy pomysł na jeden dzień, reszta zostaje)
 // --scenariusze: od razu pełne scenariusze dla każdego dnia (pomysly-ai.mjs), zapisane jako pomysły panelu (dzień -> pomysl).
-// --dopracuj: potem każdy scenariusz przez recenzentkę i poprawki (dopracuj.mjs --cel 85; ok. 1,5 USD i kilka minut na rolkę).
+// Każdy nowy scenariusz, zanim trafi do planu i kalendarza, ocenia recenzentka AI (osobna sesja, recenzent.mjs przez
+// dopracuj.mjs --prog-rec 75): poniżej 75 pkt jej poprawki wchodzą od razu (maks. 2 rundy). Do tego czasu dzień zostaje
+// „plan” bez scenariusza. Ok. 0,16 USD na rolkę bez poprawek, do ok. 1 USD z poprawkami. --bez-recenzji pomija.
+// --dopracuj: zamiast tego mocniej, do łącznie 85 pkt (dopracuj.mjs --cel 85; ok. 1,5 USD i kilka minut na rolkę).
 // Zapis: 01_PROJEKTY/_plan/<poniedziałek>.json. Panel: start, karta „🗓️ Plan na tydzień”.
 import fs from "node:fs";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import crypto from "node:crypto";
 import { ROOT, PROJEKTY, KATEGORIE, blad, ok, info, uwaga, osobaZConfigu } from "./lib.mjs";
 import { claudeJson, ZASADY_TRESCI, OBIETNICE } from "./claude-json.mjs";
 import { iso, data, plus, NAZWY_DNI, okazje, kontekstGabinetu, oznaczPytania } from "./kontekst-rolek.mjs";
 import { generujPomysly, zapiszJakoPomysl } from "./pomysly-ai.mjs";
+import { ocenScenariusz } from "./ocena-scenariusza.mjs";
 
 export { okazje };
 export const PLAN_DIR = path.join(PROJEKTY, "_plan");
@@ -93,24 +97,66 @@ export async function ulozPlan({ od, dni = ["pn", "sr", "pt"], uwagi = "", zamie
   return { plan, koszt: wynik.koszt, czas_s: wynik.czas_s, nowe: noweDni.map((d) => d.data) };
 }
 
-/** Pełne scenariusze dla dni planu (tylko tych bez pomysłu i rolki), zapisane jako pomysły panelu. */
-export async function scenariuszeDlaPlanu(od, tylko = null) {
+export const PROG_RECENZJI = 75;
+
+/** Recenzja (i poprawki) jednego pomysłu w osobnym procesie; zwraca wynik z ostatniej linii dopracuj.mjs albo { blad }. */
+function recenzujPomysl(id, tryb) {
+  const args = tryb === "dopracuj" ? ["--cel", "85"] : ["--prog-rec", String(PROG_RECENZJI), "--rundy", "2"];
+  return new Promise((res) => {
+    const p = spawn(process.execPath, [path.join(ROOT, "scripts", "dopracuj.mjs"), id, ...args], { cwd: ROOT });
+    let out = "";
+    const zbierz = (b) => { out += b; };
+    p.stdout.on("data", zbierz); p.stderr.on("data", zbierz);
+    const stop = setTimeout(() => p.kill(), 25 * 60 * 1000);
+    p.on("close", (kod) => {
+      clearTimeout(stop);
+      const m = out.match(/WYNIK_DOPRACUJ (\{.*\})/);
+      res(m ? JSON.parse(m[1]) : { blad: (out.trim().split(/\r?\n/).slice(-2).join(" ") || `kod ${kod}`).slice(0, 300) });
+    });
+  });
+}
+
+/** Pełne scenariusze dla dni planu (tylko tych bez pomysłu i rolki), zapisane jako pomysły panelu.
+ *  recenzja: "prog" (domyślnie: recenzentka AI w osobnej sesji, jej poprawki poniżej 75 pkt) | "dopracuj" (do łącznie 85)
+ *  | null (bez). Dzień dostaje scenariusz dopiero po recenzji, więc kalendarz nie pokazuje wersji sprzed poprawek. */
+export async function scenariuszeDlaPlanu(od, tylko = null, recenzja = "prog") {
   const plan = JSON.parse(fs.readFileSync(plikPlanu(od), "utf8"));
   const dni = plan.dni.filter((d) => !d.pomysl && !d.projekt && d.stan !== "pominieta" && (!tylko || tylko.includes(d.data)));
   if (!dni.length) return { ids: [], koszt: 0, czas_s: 0 };
   const { pomysly, koszt, czas_s } = await generujPomysly({ dni, od: data(od) });
+  const t0 = Date.now();
+  const gotowe = pomysly.map((P, i) => (P && dni[i] ? { d: dni[i], P, id: zapiszJakoPomysl(P, { tryb: "plan", zrodlo: `plan tygodnia, ${dni[i].data}` }) } : null)).filter(Boolean);
+  let kosztRec = 0;
+  if (recenzja && gotowe.length) {
+    info(`Recenzentka AI ocenia ${gotowe.length} ${gotowe.length === 1 ? "scenariusz" : "scenariusze"} (osobna sesja${recenzja === "dopracuj" ? ", dopracowanie do 85" : `, poprawki poniżej ${PROG_RECENZJI}`}; ok. 1-5 min)…`);
+    const kolejka = [...gotowe]; // maks. 3 naraz (każda recenzja to osobne sesje Claude)
+    await Promise.all(Array.from({ length: Math.min(3, kolejka.length) }, async () => {
+      for (let g; (g = kolejka.shift()); ) {
+        g.rec = await recenzujPomysl(g.id, recenzja);
+        kosztRec += g.rec.koszt || 0;
+        const tytul = g.P.profil?.temat || g.d.tytul;
+        if (g.rec.blad) uwaga(`  ${g.d.data} ${tytul}: recenzja się nie udała (${g.rec.blad}); scenariusz zostaje bez niej.`);
+        else info(`  ${g.d.data} ${tytul}: recenzentka ${g.rec.recenzentka ?? "?"}/100${g.rec.rundy ? `, poprawiony (${g.rec.rundy} ${g.rec.rundy === 1 ? "runda" : "rundy"})` : ""}, łącznie ${g.rec.laczna}`);
+      }
+    }));
+  }
   const ids = [];
   const swiezy = JSON.parse(fs.readFileSync(plikPlanu(od), "utf8")); // plan mógł się zmienić w trakcie (panel)
-  pomysly.forEach((P, i) => {
-    const d = dni[i]; if (!P || !d) return;
-    const id = zapiszJakoPomysl(P, { tryb: "plan", zrodlo: `plan tygodnia, ${d.data}` });
-    const dz = swiezy.dni.find((x) => x.data === d.data);
-    if (dz && !dz.pomysl && !dz.projekt) { dz.pomysl = id; dz.stan = "scenariusz"; dz.ocena = P.ocena; }
-    ids.push(id);
-  });
-  swiezy.koszt_usd = +(((swiezy.koszt_usd || 0) + koszt).toFixed(3));
+  for (const g of gotowe) {
+    const dz = (g.d.id && swiezy.dni.find((x) => x.id === g.d.id)) || swiezy.dni.find((x) => x.data === g.d.data);
+    if (dz && !dz.pomysl && !dz.projekt) {
+      let Pteraz = g.P;
+      try { Pteraz = JSON.parse(fs.readFileSync(path.join(PROJEKTY, "_pomysly", g.id, "pomysl.json"), "utf8")); } catch {}
+      dz.pomysl = g.id; dz.stan = "scenariusz";
+      dz.ocena = g.rec?.twarda ?? ocenScenariusz(Pteraz).wynik;
+      if (g.rec && !g.rec.blad) { dz.recenzja = g.rec.recenzentka; dz.ocena_laczna = g.rec.laczna; if (g.rec.rundy) dz.poprawiony = true; }
+    }
+    ids.push(g.id);
+  }
+  swiezy.koszt_usd = +(((swiezy.koszt_usd || 0) + koszt + kosztRec).toFixed(3));
   fs.writeFileSync(plikPlanu(od), JSON.stringify(swiezy, null, 2) + "\n");
-  return { ids, koszt, czas_s, oceny: pomysly.map((P) => (P ? P.ocena : "odrzucony")) };
+  const opis = (P, i) => { const g = gotowe.find((x) => x.d === dni[i]); return !P ? "odrzucony" : g?.rec && !g.rec.blad ? `${g.rec.laczna} (recenzentka ${g.rec.recenzentka})` : P.ocena; };
+  return { ids, koszt: koszt + kosztRec, czas_s: Math.round(czas_s + (Date.now() - t0) / 1000), oceny: pomysly.map(opis) };
 }
 
 // --- CLI ---
@@ -122,7 +168,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   od = iso(poniedzialek(od ? data(od) : a.includes("--nastepny") ? plus(new Date(), 7) : new Date()));
   const dni = (opt("dni") || "pn,sr,pt").split(",").map((s) => s.trim().toLowerCase()).filter((s) => DNI.includes(s));
   const zamien = opt("zamien");
-  const dopracujWszystkie = (ids) => { for (const id of ids) { info(`\nDopracowuję z recenzentką: ${id}…`); spawnSync(process.execPath, [path.join(ROOT, "scripts", "dopracuj.mjs"), id, "--cel", "85"], { cwd: ROOT, stdio: "inherit" }); } };
+  const trybRec = a.includes("--bez-recenzji") ? null : a.includes("--dopracuj") ? "dopracuj" : "prog";
   // Kilka tygodni naraz (kalendarz: „✦ Zaplanuj miesiąc”): --tygodnie RRRR-MM-DD,RRRR-MM-DD (poniedziałki); pomija miniona i zaplanowane.
   if (opt("tygodnie")) {
     const dzisPon = iso(poniedzialek(new Date()));
@@ -137,7 +183,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
         suma += koszt;
         info(`  Motyw: ${plan.motyw}`);
         for (const d of plan.dni) info(`  ${d.data} · ${d.tytul} [${d.kategoria}, ${d.wyglad}]`);
-        if (a.includes("--scenariusze")) { const s = await scenariuszeDlaPlanu(t, nowe); suma += s.koszt; info(`  Scenariusze: ${(s.oceny || []).join(", ")}`); }
+        if (a.includes("--scenariusze")) { const s = await scenariuszeDlaPlanu(t, nowe, trybRec); suma += s.koszt; info(`  Scenariusze: ${(s.oceny || []).join(", ")}`); }
       } catch (e) { uwaga(`Tydzień ${t}: ${e.message}`); }
     }
     ok(`Zaplanowane tygodnie: ${lista.length} (razem ${suma.toFixed(2)} USD).`);
@@ -146,10 +192,9 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   if (a.includes("--tylko-scenariusze")) {
     try {
       info(`Piszę pełne scenariusze dla dni planu ${od} bez scenariusza (ok. 2-4 min)…`);
-      const s = await scenariuszeDlaPlanu(od);
+      const s = await scenariuszeDlaPlanu(od, null, trybRec);
       if (!s.ids.length) ok("Wszystkie dni mają już scenariusz albo rolkę.");
       else ok(`Scenariusze gotowe: ${s.ids.length} (${s.czas_s} s, ${s.koszt.toFixed(2)} USD), oceny: ${(s.oceny || []).join(", ")}`);
-      if (a.includes("--dopracuj")) dopracujWszystkie(s.ids);
     } catch (e) { blad(`Nie udało się: ${e.message}`, "Sprawdź, czy Claude Code jest zalogowany (claude w terminalu)."); }
     process.exit(0);
   }
@@ -162,9 +207,8 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     if (plan.uwagi && !zamien) uwaga(plan.uwagi);
     if (a.includes("--scenariusze")) {
       info(`\nPiszę pełne scenariusze dla ${nowe.length} ${nowe.length === 1 ? "rolki" : "rolek"} (ok. 2-4 min)…`);
-      const s = await scenariuszeDlaPlanu(od, nowe);
+      const s = await scenariuszeDlaPlanu(od, nowe, trybRec);
       ok(`Scenariusze gotowe (${s.czas_s} s, ${s.koszt.toFixed(2)} USD), oceny: ${(s.oceny || []).join(", ")}`);
-      if (a.includes("--dopracuj")) dopracujWszystkie(s.ids);
     }
   } catch (e) { blad(`Nie udało się: ${e.message}`, "Sprawdź, czy Claude Code jest zalogowany (claude w terminalu)."); }
 }

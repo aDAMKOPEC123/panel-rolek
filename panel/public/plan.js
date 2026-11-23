@@ -89,8 +89,8 @@ async function oknoUkladania(odTyg) {
     <details class="pl-grafik" ${maGrafik ? "open" : ""}><summary><b>📋 Co masz w grafiku?</b> <small class="podpowiedz">wizyty, przy których da się nagrać: rolki trafią w to, co i tak robisz</small></summary>
       <div class="pl-grafik-dni">${tydzien.map(([, d], i) => `<label><span>${DNI_KROTKO[i]} ${dataPl(d, { day: "numeric" })}</span><input data-grafik="${d}" value="${esc(grafik[d] || "")}" placeholder="np. laminacja rzęs 10:00, 2x pedicure"></label>`).join("")}</div></details>
     <label class="pole"><span>Coś, o czym Claude ma wiedzieć? (opcjonalnie)</span><textarea id="plUwagi" rows="3" placeholder="np. w czwartek mam promocję na laminację; w piątek gabinet zamknięty; chcę więcej podologii">${esc(ust.uwagi || "")}</textarea></label>
-    <label class="rzad"><input type="checkbox" id="plScen" checked> ✍️ Od razu napisz pełne scenariusze z oceną (+2-4 min, ok. 0,3-0,6 USD)</label>
-    <label class="rzad" style="margin-top:6px"><input type="checkbox" id="plDopr"> 🎯 I dopracuj każdy z recenzentką do 85 pkt (ok. 1,5 USD i kilka minut na rolkę, w tle)</label>
+    <label class="rzad"><input type="checkbox" id="plScen" checked> ✍️ Od razu napisz pełne scenariusze z oceną (+3-8 min, ok. 0,8-2 USD). Każdy sprawdza recenzentka AI, poniżej 75 pkt od razu go poprawia</label>
+    <label class="rzad" style="margin-top:6px"><input type="checkbox" id="plDopr"> 🎯 Mocniej: dopracuj każdy z recenzentką do 85 pkt łącznie (ok. 1,5 USD i kilka minut na rolkę)</label>
     <p class="podpowiedz" style="margin-top:8px">Sam plan: ok. 30 s i 0,1 USD z konta Claude Code.</p>
     <div class="rzad"><button class="btn duzy" id="plStart" data-zadanie>✦ Ułóż plan</button><button class="btn jasny" id="plNie">Anuluj</button></div>`);
   const ile = () => { $("#plIle", m).textContent = dni.size ? `${dni.size} ${dni.size === 1 ? "rolka" : dni.size < 5 ? "rolki" : "rolek"} w tygodniu${dni.size > 5 ? " (dużo: rozważ 3-4, żeby nadążyć z nagraniami)" : ""}` : "Zaznacz choć jeden dzień"; };
@@ -130,7 +130,7 @@ async function szczegolyRolki(id, od) {
     ${d.cta ? `<p class="podpowiedz">Na koniec: „${esc(d.cta)}”</p>` : ""}
     <div class="pl-akcje">
       ${d.projekt ? `<button class="btn duzy" id="pdRolka">🎬 Otwórz rolkę</button>`
-        : d.pomysl ? `<button class="btn duzy" id="pdPomysl">✍️ Otwórz scenariusz${d.ocena ? ` (${d.ocena} pkt)` : ""}</button><button class="btn jasny" id="pdAuto">🪄 Mam nagrania: zmontuj</button>`
+        : d.pomysl ? `<button class="btn duzy" id="pdPomysl">✍️ Otwórz scenariusz${d.ocena_laczna != null ? ` (${d.ocena_laczna} pkt, recenzentka ${d.recenzja}${d.poprawiony ? ", poprawiony" : ""})` : d.ocena ? ` (${d.ocena} pkt)` : ""}</button><button class="btn jasny" id="pdAuto">🪄 Mam nagrania: zmontuj</button>`
         : `<button class="btn duzy" id="pdScenariusz">✦ Rozpisz scenariusz z Claude</button><button class="btn jasny" id="pdAuto">🪄 Mam już nagrania: zmontuj</button>`}
       <button class="btn jasny" id="pdTel">📱 Nagram telefonem</button>
     </div>

@@ -1,5 +1,6 @@
 // Pętla „✦ Dopracuj do maksimum” (plan: docs/PLAN_scenariusz_hook.md, etap 4).
-//   npm run dopracuj -- <id pomysłu z 01_PROJEKTY/_pomysly | projekt> [--rundy 3] [--cel 90]
+//   npm run dopracuj -- <id pomysłu z 01_PROJEKTY/_pomysly | projekt> [--rundy 3] [--cel 90] [--prog-rec 75]
+// --prog-rec N: tryb planu (plan-tygodnia.mjs): cel = sama ocena recenzentki >= N, jej poprawki idą przed twardymi.
 // Runda: ocena (twarda + recenzentka) -> maks. 3 poprawki (najpierw hook, potem dynamika) -> autorka (osobna sesja
 // Claude) poprawia tylko te miejsca -> ponowna ocena. Wersja zostaje tylko, gdy wynik łączny wzrósł; inaczej wraca
 // poprzednia. Stop: wynik >= cel i hook bez niezaliczonych testów, przyrost < 3 pkt albo limit rund.
@@ -18,7 +19,9 @@ const OS = new Proxy({}, { get: (_, k) => osobaZConfigu()[k] });
 const args = process.argv.slice(2);
 const cel = args.find((a) => !a.startsWith("--") && !/^\d+$/.test(a));
 const opt = (n, d) => { const i = args.indexOf(`--${n}`); return i >= 0 ? Number(args[i + 1]) : d; };
-const RUNDY = Math.max(1, Math.min(5, opt("rundy", 3))), CEL = opt("cel", 90);
+const RUNDY = Math.max(1, Math.min(5, opt("rundy", 3))), CEL = opt("cel", 90), PROG_REC = opt("prog-rec", null);
+const wynikRec = (o) => o.rec?.recenzja?.wynik ?? null;
+const celOsiagniety = (o) => (PROG_REC != null ? (wynikRec(o) ?? 0) >= PROG_REC : o.laczna >= CEL && hookOk(o));
 if (!cel) blad("Podaj id pomysłu albo projekt.", "npm run dopracuj -- 2026-11-16_142420");
 const pom = path.join(ROOT, "01_PROJEKTY", "_pomysly", cel, "pomysl.json");
 const plik = fs.existsSync(pom) ? pom : path.join(znajdzProjekt(cel), "scenariusz.json");
@@ -53,20 +56,19 @@ const hookOk = (o) => o.twarda.testy.filter((t) => t.grupa === "hook" && !t.pomi
 let rec = czytajJ(REC);
 if (!rec || rec.podpis !== podpisScenariusza(P)) { info("Ocena wyjściowa: recenzentka czyta scenariusz ..."); rec = recenzja(); }
 let teraz = ocena(P, rec);
-info(`Start: twarda ${teraz.twarda.wynik}, recenzentka ${teraz.rec?.recenzja?.wynik ?? "?"}, łącznie ${teraz.laczna}/100 (cel ${CEL}).`);
+info(`Start: twarda ${teraz.twarda.wynik}, recenzentka ${teraz.rec?.recenzja?.wynik ?? "?"}, łącznie ${teraz.laczna}/100 (${PROG_REC != null ? `próg recenzentki ${PROG_REC}` : `cel ${CEL}`}).`);
 const historia = czytajJ(HIST, { wersje: [] });
 const raport = [];
 
 for (let runda = 1; runda <= RUNDY; runda++) {
-  if (teraz.laczna >= CEL && hookOk(teraz)) { ok(`Cel osiągnięty (${teraz.laczna}/100), koniec.`); break; }
+  if (celOsiagniety(teraz)) { ok(PROG_REC != null ? `Recenzentka: ${wynikRec(teraz)}/100 (próg ${PROG_REC}), poprawki niepotrzebne.` : `Cel osiągnięty (${teraz.laczna}/100), koniec.`); break; }
   // ---------- maks. 3 poprawki: hook z twardej, recenzentka, reszta twardej ----------
   const kol = ["hook", "dynamika", "czytelnosc", "struktura"];
   const twarde = teraz.twarda.testy.filter((t) => !t.ok && !t.pominiety && t.naprawa).sort((a, b) => kol.indexOf(a.grupa) - kol.indexOf(b.grupa) || (b.waga - b.pkt) - (a.waga - a.pkt));
-  const poprawki = [
-    ...twarde.filter((t) => t.grupa === "hook").map((t) => `[twarda: ${t.tekst}] ${t.naprawa}`),
-    ...(teraz.rec?.poprawki || []).filter((p) => !p.uwaga).map((p) => `[recenzentka] ${p.co} Dlaczego: ${p.dlaczego} Przykład (dopasuj, nie kopiuj na siłę): ${p.przyklad}`),
-    ...twarde.filter((t) => t.grupa !== "hook").map((t) => `[twarda: ${t.tekst}] ${t.naprawa}`),
-  ].slice(0, 3);
+  const odRec = (teraz.rec?.poprawki || []).filter((p) => !p.uwaga).map((p) => `[recenzentka] ${p.co} Dlaczego: ${p.dlaczego} Przykład (dopasuj, nie kopiuj na siłę): ${p.przyklad}`);
+  const hookTw = twarde.filter((t) => t.grupa === "hook").map((t) => `[twarda: ${t.tekst}] ${t.naprawa}`);
+  const resztaTw = twarde.filter((t) => t.grupa !== "hook").map((t) => `[twarda: ${t.tekst}] ${t.naprawa}`);
+  const poprawki = (PROG_REC != null ? [...odRec, ...hookTw, ...resztaTw] : [...hookTw, ...odRec, ...resztaTw]).slice(0, 3);
   if (!poprawki.length) { ok("Nie ma już czego poprawiać."); break; }
   info(`Runda ${runda}/${RUNDY}: ${poprawki.length} poprawki`);
   poprawki.forEach((p, i) => console.log(`  ${i + 1}. ${p.slice(0, 160)}`));
@@ -133,3 +135,6 @@ ok(`Koniec: łącznie ${teraz.laczna}/100 (twarda ${teraz.twarda.wynik}, recenze
 const zostalo = teraz.twarda.testy.filter((t) => !t.ok && !t.pominiety);
 if (zostalo.length) info(`Zostało w twardej ocenie: ${zostalo.map((t) => t.tekst).join("; ")}`);
 if (raport.some((r) => !r.odrzucona)) info(`Poprzednie wersje: ${path.relative(ROOT, HIST)} (w panelu „Cofnij”).`);
+
+// wynik dla plan-tygodnia.mjs (ostatnia linia wyjścia)
+console.log("WYNIK_DOPRACUJ " + JSON.stringify({ laczna: teraz.laczna, twarda: teraz.twarda.wynik, recenzentka: wynikRec(teraz), rundy: raport.filter((r) => !r.odrzucona).length, koszt: Math.round(koszt * 1000) / 1000 }));

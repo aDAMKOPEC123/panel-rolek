@@ -137,7 +137,7 @@ function oknoMiesiaca(tygodnie) {
     <p class="kr-etykieta">W które dni publikujesz?</p>
     <div class="pl-wybor-dni">${DNI_KROTKO.map((n, i) => `<button class="${dni.has(DNI_KLUCZE[i]) ? "wybrany" : ""}" data-d="${DNI_KLUCZE[i]}">${n}</button>`).join("")}</div>
     <label class="pole" style="margin-top:10px"><span>Coś, o czym Claude ma wiedzieć? (opcjonalnie)</span><textarea id="zmUwagi" rows="2" placeholder="np. 15-20 grudnia urlop; w grudniu promocja na vouchery"></textarea></label>
-    <label class="rzad"><input type="checkbox" id="zmScen"> ✍️ Od razu pełne scenariusze (ok. +0,5 USD i +3 min na tydzień)</label>
+    <label class="rzad"><input type="checkbox" id="zmScen"> ✍️ Od razu pełne scenariusze, sprawdzone przez recenzentkę AI (ok. +1-2 USD i +5-8 min na tydzień)</label>
     <p class="podpowiedz" id="zmKoszt"></p>
     <div class="rzad"><button class="btn duzy" id="zmTak" data-zadanie>✦ Zaplanuj</button><button class="btn jasny" id="zmNie">Anuluj</button></div>`);
   const koszt = () => { const s = $("#zmScen", m).checked; $("#zmKoszt", m).textContent = `Szacunek: ok. ${(tygodnie.length * (s ? 0.6 : 0.1)).toFixed(1).replace(".", ",")} USD i ${tygodnie.length * (s ? 4 : 1)} min (w tle, możesz pracować dalej).`; };
