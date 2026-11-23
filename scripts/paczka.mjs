@@ -63,7 +63,10 @@ fs.rmSync(tmp, { recursive: true, force: true });
 if (r.status !== 0 || !fs.existsSync(out)) blad("Nie udało się zrobić paczki.", (r.stderr || "").slice(-300));
 
 // kontrola: lista plików w ZIP-ie bez rzeczy prywatnych
-const lista = spawnSync("tar", ["-tf", out], { encoding: "utf8" }).stdout.split(/\r?\n/).filter(Boolean);
+// paczka = dokładnie commit HEAD + 2 dodane pliki, więc lista z git ls-tree jest pełną listą zawartości ZIP-a
+const wCommicie = git("ls-tree", "-r", "--name-only", "HEAD").stdout.split(/\r?\n/).filter(Boolean);
+if (!wCommicie.length) blad("Nie udało się odczytać listy plików z commita.");
+const lista = [...wCommicie, "JAK_ZAINSTALOWAC.txt", "WERSJA.txt"].map((n) => `panel-rolek/${n}`);
 const PRYWATNE = /^panel-rolek\/(config\.json|\.licencja\.json|narzedzia\/|02_BRAND\/(autopilot|kolory|caption-skin|instagram)|01_PROJEKTY\/(?!_SZABLON_ROLKI|README)|05_ARCHIWUM\/(?!README)|00_INBOX\/(?!README)|03_BIBLIOTEKA\/(muzyka|sfx|research)\/(?!README|kotwice)|.*KODY_LICENCJI)/;
 const zle = lista.filter((n) => PRYWATNE.test(n));
 if (zle.length) { fs.rmSync(out, { force: true }); blad(`Paczka zawierała prywatne pliki (${zle.slice(0, 5).join(", ")}). Usunięta.`, "Sprawdź .gitignore i commit."); }
