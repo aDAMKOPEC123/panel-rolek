@@ -235,21 +235,112 @@ function kartaCharakteru(box) {
   if (!box) return;
   const r = rolka();
   const nat = r.montaz === "naturalny";
+  const preset = wybranyStylMontazu();
   box.innerHTML = `<div class="karta"><h3>🎬 Charakter montażu</h3>
     <p class="podpowiedz" style="margin-bottom:10px">Reklamowy pokazuje markę (plansze, logo, dźwięki, przejścia). Naturalny wygląda jak rolka vlogerki z telefonu: mniej „agencji”, więcej Ciebie. Ujęcia, mowa, przed/po i zajawka zostają, a ustawienia rolki się nie gubią: wrócisz jednym kliknięciem.</p>
     <div class="charakter">
-      <button class="charakter-opcja ${nat ? "" : "wybrany"}" data-montaz="reklamowy"><b>📣 Reklamowy</b><small>Plansze z hookiem i CTA w kolorach marki, logo, znak wodny, dźwięki, efekty przejść. Wszystko, co ustawisz niżej.</small></button>
+      <button class="charakter-opcja ${nat || preset ? "" : "wybrany"}" data-montaz="reklamowy"><b>📣 Reklamowy</b><small>Plansze z hookiem i CTA w kolorach marki, logo, znak wodny, dźwięki, efekty przejść. Wszystko, co ustawisz niżej.</small></button>
       <button class="charakter-opcja ${nat ? "wybrany" : ""}" data-montaz="naturalny"><b>🤳 Naturalny, jak vlog</b><small>${OPIS_NATURALNEGO.map(([i, t]) => `${i} ${t}`).join("<br>")}</small></button>
     </div>
-    ${nat ? `<p class="podpowiedz" style="margin-top:10px">Działa przy składaniu: efekty i style niżej zostają zapisane, ale w tym trybie zloz je pomija. Tekst z Instagrama możesz też dodać ręcznie jako scenę „Tekst z Instagrama” w kroku Sceny. Mów do kamery jak do koleżanki, a CTA powiedz słowami („napisz mi, to podeślę termin”).</p>` : ""}</div>`;
+    ${nat ? `<p class="podpowiedz" style="margin-top:10px">Działa przy składaniu: efekty i style niżej zostają zapisane, ale w tym trybie zloz je pomija. Tekst z Instagrama możesz też dodać ręcznie jako scenę „Tekst z Instagrama” w kroku Sceny. Mów do kamery jak do koleżanki, a CTA powiedz słowami („napisz mi, to podeślę termin”).</p>` : ""}</div>
+    <div class="panel-presetow"></div>`;
   box.querySelectorAll("[data-montaz]").forEach((b) => (b.onclick = () => {
     if (b.dataset.montaz === "naturalny") r.montaz = "naturalny"; else delete r.montaz;
     zapiszRolke();
     toast(b.dataset.montaz === "naturalny" ? "Montaż naturalny, jak vlog" : "Montaż reklamowy");
     kartaCharakteru(box);
   }));
+  kartaPresetowMontazu($(".panel-presetow", box));
 }
+function wybranyStylMontazu() {
+  return S.start?.styleMontazu?.find((p) => p.id === S.projekt?.rolka?.montaz);
+}
+
+function kartaPresetowMontazu(box) {
+  if (!box || !S.start.styleMontazu?.length) return;
+  const P = S.projekt;
+  const r = rolka();
+  const maMaterial = P.pliki.proxy.some((p) => p.typ === "wideo") || r.ujecia.some((u) => u.src && metaPliku(u.src));
+  box.innerHTML = `<section class="karta"><h3>Presety montażu</h3>
+    <div class="presety-montazu">${S.start.styleMontazu.map((p) => {
+      const aktywny = p.id === r.montaz;
+      return `<article class="preset-montazu ${aktywny ? "wybrany" : ""}" data-preset="${p.id}">
+        <h4>${esc(p.nazwa)}</h4><p>${esc(p.opis)}</p>
+        <div class="rzad">
+          <button type="button" class="btn maly jasny" data-preset-podglad data-zadanie ${maMaterial ? "" : 'disabled data-zablokowany="1"'}>Podgląd</button>
+          <button type="button" class="btn maly" data-preset-zastosuj data-zadanie ${aktywny ? 'disabled data-zablokowany="1"' : ""}>${aktywny ? "Aktywny" : "Zastosuj"}</button>
+        </div>
+      </article>`;
+    }).join("")}</div>
+    ${maMaterial ? "" : `<p class="podpowiedz">Przygotuj nagrania, aby obejrzeć podgląd.</p>`}
+    <div class="preset-podglad" hidden></div>
+  </section>`;
+  const podglad = $(".preset-podglad", box);
+  for (const karta of box.querySelectorAll("[data-preset]")) {
+    const p = S.start.styleMontazu.find((s) => s.id === karta.dataset.preset);
+    $("[data-preset-podglad]", karta).onclick = () => podgladStyluMontazu(P, podglad, p);
+    $("[data-preset-zastosuj]", karta).onclick = async () => {
+      box.querySelectorAll("[data-zadanie]").forEach((b) => { b.disabled = true; });
+      try {
+        const zapis = await api(`/api/projekt/${encodeURIComponent(P.nazwa)}/rolka`, { method: "PUT", body: { ...r, montaz: p.id } });
+        r.montaz = p.id;
+        P.rolkaZmiana = zapis.zmiana;
+        if (S.projekt === P) {
+          pokaz();
+          toast(`Styl montażu: ${p.nazwa}`);
+        }
+      } catch (e) {
+        blad(e);
+      } finally {
+        odswiezPrzyciski();
+      }
+    };
+  }
+  odswiezPrzyciski();
+}
+
+async function podgladStyluMontazu(projekt, box, preset) {
+  if (S.zadanie || box.dataset.ladowanie) return;
+  box.dataset.ladowanie = "1";
+  box.hidden = false;
+  box.innerHTML = `<p class="podpowiedz" role="status">Składam podgląd · ${esc(preset.nazwa)}…</p>`;
+  try {
+    const z = await api(`/api/projekt/${encodeURIComponent(projekt.nazwa)}/podglad-stylu`, { method: "POST", body: { styl: preset.id } });
+    const { kod, tekst } = await sledz(z, `Podgląd · ${preset.nazwa}`);
+    if (kod !== 0) throw new Error(tekst.split("\n").find((l) => l.includes("BŁĄD:")) || "Podgląd przerwany.");
+    if (!box.isConnected || S.projekt !== projekt) return;
+    box.innerHTML = `<hyperframes-player runtime-src="/vendor/hyperframe.runtime.iife.js"></hyperframes-player>
+      <div><h4>${esc(preset.nazwa)}</h4><p class="podpowiedz">Pierwsze 7 sekund z dźwiękiem.</p>
+        <div class="rzad"><button type="button" class="btn maly" data-graj disabled>Odtwórz</button><button type="button" class="btn maly jasny" data-zamknij>Zamknij</button></div></div>`;
+    const player = $("hyperframes-player", box);
+    const graj = $("[data-graj]", box);
+    const granica = () => Math.min(7, player.duration || 7);
+    player.addEventListener("ready", () => { graj.disabled = false; }, { once: true });
+    player.addEventListener("timeupdate", () => {
+      if (player.currentTime >= granica() - 0.03) { player.pause(); graj.textContent = "Odtwórz od początku"; }
+    });
+    graj.onclick = () => {
+      if (player.paused) {
+        if (player.currentTime >= granica() - 0.05) player.seek(0);
+        player.play();
+        graj.textContent = "Pauza";
+      } else {
+        player.pause();
+        graj.textContent = "Wznów";
+      }
+    };
+    $("[data-zamknij]", box).onclick = () => { player.pause(); box.hidden = true; box.replaceChildren(); };
+    player.setAttribute("src", `${z.src}?v=${Date.now()}`);
+  } catch (e) {
+    box.innerHTML = `<p class="podpowiedz" role="status">${esc(e.message)}</p>`;
+  } finally {
+    delete box.dataset.ladowanie;
+  }
+}
+
 function uwagaMontazu() {
+  const preset = wybranyStylMontazu();
+  if (preset) return `\nSTYL MONTAŻU: ${preset.nazwa} (rolka.json -> "montaz": "${preset.id}"). ${preset.wskazowka} Zostaw wybrany identyfikator podczas zapisu.\n`;
   return S.projekt?.rolka?.montaz === "naturalny"
     ? `\nMONTAŻ NATURALNY (rolka.json -> montaz: "naturalny"): rolka ma wyglądać jak u vlogerki, nie jak reklama. Nie dodawaj plansz reklamowych (ig-obserwuj, cena-oferta, cena-za-postacia, lower-third, ozdobniki, kino) ani sfx; tekst na ekranie jako scena tekst-natywny (krótko, małymi literami jak w aplikacji, bez *akcentów*); CTA miękko, słowami ${OS().dop}; przejścia: cięcie. zloz sam przerabia hook-tytul i cta-koncowe na tekst-natywny i wyłącza efekty reklamowe (scripts/montaz-naturalny.mjs), więc nie usuwaj ich z rolka.json.\n`
     : "";

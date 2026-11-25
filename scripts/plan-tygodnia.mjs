@@ -1,7 +1,8 @@
-// Plan rolek na tydzień: Claude układa 1 rolkę na każdy wybrany dzień publikacji, pod sezon i okazje, usługi gabinetu,
+// Plan publikacji na tydzień: Claude układa wpis we wskazanym formacie na każdy wybrany dzień, pod usługi gabinetu,
 // grafik zabiegów, pytania klientek, wnioski i przepis z wyników, bank hooków i ostatnie rolki (kontekst: kontekst-rolek.mjs).
 // Każdy dzień: tytuł, kategoria, format, hook (tekst + zdanie), dlaczego teraz, co nagrać (lista), kiedy nagrać, CTA, wygląd.
 //   npm run plan -- [--od RRRR-MM-DD] [--nastepny] [--dni pn,sr,pt] [--uwagi "tekst"] [--scenariusze] [--dopracuj]
+//   npm run plan -- --publikacje pn:rolka:edukacyjny,wt:post:promocyjny,sr:karuzela,cz:story
 //   npm run plan -- --od RRRR-MM-DD --zamien RRRR-MM-DD [--uwagi "..."]   (nowy pomysł na jeden dzień, reszta zostaje)
 // --scenariusze: od razu pełne scenariusze dla każdego dnia (pomysly-ai.mjs), zapisane jako pomysły panelu (dzień -> pomysl).
 // Każdy nowy scenariusz, zanim trafi do planu i kalendarza, ocenia recenzentka AI (osobna sesja, recenzent.mjs przez
@@ -19,10 +20,12 @@ import { claudeJson, ZASADY_TRESCI, OBIETNICE } from "./claude-json.mjs";
 import { iso, data, plus, NAZWY_DNI, okazje, kontekstGabinetu, oznaczPytania } from "./kontekst-rolek.mjs";
 import { generujPomysly, zapiszJakoPomysl } from "./pomysly-ai.mjs";
 import { ocenScenariusz } from "./ocena-scenariusza.mjs";
+import { CELE_PUBLIKACJI, TYPY_PUBLIKACJI, DNI_PUBLIKACJI, rozkladPublikacji, typPublikacji, czyRolka } from "./publikacje.mjs";
+import { KRYTERIA_PUBLIKACJI, recenzujPlanyPublikacji } from "./jakosc-publikacji.mjs";
 
 export { okazje };
 export const PLAN_DIR = path.join(PROJEKTY, "_plan");
-export const DNI = ["pn", "wt", "sr", "cz", "pt", "so", "nd"];
+export const DNI = DNI_PUBLIKACJI;
 export function poniedzialek(d = new Date()) { const x = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; }
 export const plikPlanu = (od) => path.join(PLAN_DIR, `${od}.json`);
 
@@ -31,14 +34,14 @@ const SCHEMAT_DNIA = {
   required: ["data", "tytul", "kategoria", "format", "hook_tekst", "hook_mowa", "dlaczego_teraz", "co_nagrac", "nagraj_dnia", "kiedy_nagrac", "cta", "wyglad", "godzina", "pytanie_klientki"],
   properties: {
     data: { type: "string", description: "RRRR-MM-DD dnia publikacji" },
-    tytul: { type: "string", description: "krótki temat rolki, 3-8 słów" },
+    tytul: { type: "string", description: "krótki temat publikacji, 3-8 słów" },
     kategoria: { type: "string", enum: KATEGORIE },
     format: { type: "string" },
     hook_tekst: { type: "string", description: "tekst na ekranie w 1. sekundzie, 3-7 słów, jedno *słowo* w gwiazdkach = akcent" },
     hook_mowa: { type: "string", description: "pierwsze zdanie mówione, maks. 10 słów, bez „cześć”, „dzisiaj”, „pokażę wam”" },
     dlaczego_teraz: { type: "string", description: "jedno zdanie: dlaczego ta rolka w tym tygodniu (okazja, pora roku, wizyta z grafiku, pytanie klientki, wynik)" },
-    co_nagrac: { type: "array", minItems: 2, maxItems: 6, items: { type: "object", additionalProperties: false, required: ["co", "jak"], properties: { co: { type: "string" }, jak: { type: "string", description: "kadr, światło, ile sekund" } } } },
-    nagraj_dnia: { type: "string", description: "RRRR-MM-DD, kiedy nagrać (najlepiej dzień wizyty z grafiku; dzień albo dwa przed publikacją)" },
+    co_nagrac: { type: "array", minItems: 1, maxItems: 6, items: { type: "object", additionalProperties: false, required: ["co", "jak"], properties: { co: { type: "string" }, jak: { type: "string", description: "wykonanie ujęcia, grafiki, slajdu lub animowanej planszy" } } } },
+    nagraj_dnia: { type: "string", description: "RRRR-MM-DD dla rolki, pusty dla innych formatów" },
     kiedy_nagrac: { type: "string", description: "przy jakiej okazji w gabinecie nagrać, np. „przy laminacji we wtorek o 10”" },
     cta: { type: "string", description: "jedno miękkie wezwanie, mówione" },
     wyglad: { type: "string", enum: ["reklamowy", "naturalny"], description: "naturalny = jak vlog (POV, dzień w gabinecie, Q&A); reklamowy = przed/po, cena, oferta" },
@@ -50,51 +53,85 @@ const SCHEMAT = {
   type: "object", additionalProperties: false, required: ["motyw", "dni", "uwagi"],
   properties: { motyw: { type: "string", description: "motyw tygodnia, 3-8 słów" }, dni: { type: "array", items: SCHEMAT_DNIA }, uwagi: { type: "string", description: "1-2 zdania dla prowadzącej, np. o czym pamiętać w tym tygodniu" } },
 };
+function poprawnaRozpiska(wpis, typ) {
+  return typeof wpis?.tytul === "string" && wpis.tytul.trim().length >= 3
+    && Array.isArray(wpis.co_nagrac) && wpis.co_nagrac.length >= (typ === "rolka" ? 2 : KRYTERIA_PUBLIKACJI[typ].min)
+    && wpis.co_nagrac.every((u) => typeof u?.co === "string" && u.co.trim() && typeof u.jak === "string" && u.jak.trim());
+}
 
-function prompt({ od, daty, uwagi, zamien, istniejace, sasiednie = [] }) {
+function prompt({ od, cele, uwagi, zamien, istniejace, sasiednie = [] }) {
   const OS = osobaZConfigu();
-  return `Ułóż ${zamien ? "JEDEN nowy pomysł na rolkę (zamiana)" : "plan rolek na tydzień"} dla gabinetu beauty.
+  return `Ułóż ${zamien ? "jedną nową propozycję publikacji" : "tygodniowy plan publikacji"} dla gabinetu beauty.
 TYDZIEŃ: od ${od} (poniedziałek).
-${zamien ? `DZIEŃ DO ZAMIANY: ${zamien}. Pozostałe rolki tego tygodnia (nie powtarzaj tematu ani formatu):\n${istniejace.map((d) => `- ${d.data}: ${d.tytul} (${d.format})`).join("\n")}` : `DNI PUBLIKACJI (dokładnie jedna rolka na każdy, w tej kolejności): ${daty.map((d) => `${d} (${NAZWY_DNI[(data(d).getDay() + 6) % 7]})`).join(", ")}.`}
+WYMAGANE PUBLIKACJE. Każda data występuje dokładnie raz. Użyj dat i formatu z listy:
+${cele.map((d) => `- ${d.data} (${NAZWY_DNI[(data(d.data).getDay() + 6) % 7]}): ${TYPY_PUBLIKACJI[d.typ_publikacji].nazwa}, ${CELE_PUBLIKACJI[d.cel_publikacji]}`).join("\n")}
+${istniejace.length ? `Pozostałe publikacje tego tygodnia (unikaj powtarzania tematów):\n${istniejace.map((d) => `- ${d.data}: ${d.tytul} (${d.format || typPublikacji(d)})`).join("\n")}` : ""}
 ${uwagi ? `UWAGI ${OS.dop.toUpperCase()} NA TEN TYDZIEŃ (najważniejsze): ${uwagi}\n` : ""}
 ${kontekstGabinetu({ od: data(od), dni: 10 })}${sasiednie.length ? `ZAPLANOWANE W SĄSIEDNICH TYGODNIACH (nie powtarzaj tematów ani tych samych formatów pod rząd):\n${sasiednie.join("\n")}\n` : ""}
 ZASADY:
-- Różnorodność w tygodniu: różne kategorie usług i różne formaty; maks. jedna rolka sprzedażowa (cena, oferta, przed/po z ceną) na tydzień; co najmniej jedna naturalna (wyglad "naturalny": POV, dzień w gabinecie, Q&A, mit vs fakt mówione do kamery).
-- Jeśli są pytania klientek, co najmniej jedna rolka w tygodniu odpowiada na jedno z nich (wpisz je w "pytanie_klientki").
-- Każda rolka ma być do nagrania telefonem w zwykły dzień pracy, przy zabiegach, które i tak się odbywają (grafik!). "co_nagrac": konkretne ujęcia (co i jak), 2-6 pozycji; twarz klientki tylko za zgodą, więc dawaj też ujęcia bez twarzy.
-- "nagraj_dnia": dzień wizyty z grafiku albo dzień przed publikacją; nie w niedzielę, jeśli gabinet nieczynny.
-- Hook: konkret, luka ciekawości albo „to o mnie”, obraz z ruchem albo efektem w 1. sekundzie. Podologia estetycznie, bez szokującego startu i bez diagnoz.
+- Dobieraj różne tematy. Gdy cel jest dowolny, łącz edukację i wizerunek z oszczędną promocją. Jeśli pasuje pytanie klientki, wpisz je w "pytanie_klientki".
+- Rolka: "co_nagrac" to 2–6 konkretnych ujęć, "hook_mowa" to pierwsze zdanie. "nagraj_dnia" to dzień wizyty z grafiku albo dzień przed publikacją. Pierwsza sekunda ma mocny obraz. Twarz klientki tylko za zgodą.
+- Post statyczny: "hook_tekst" to nagłówek grafiki. W "co_nagrac" rozpisz główny obraz, krótkie copy na grafice i cel opisu posta. Bez osi czasu.
+- Karuzela: "hook_tekst" to okładka. W "co_nagrac" daj 3–6 kolejnych slajdów z nagłówkiem, obrazem i ostatnim slajdem z CTA.
+- Animowane Story: "co_nagrac" to 2–4 krótkie pionowe plansze z tekstem, czasem i pomysłem na ruch lub przejście. Zostaw miejsce na interfejs i naklejkę, jeżeli jej używasz.
+- Dla posta statycznego, karuzeli i Story pola "hook_mowa", "nagraj_dnia" i "kiedy_nagrac" zostaw puste. "format" doprecyzowuje pomysł (np. „Mit i fakt”), "cta" może być tekstowe. Podologia estetycznie i bez diagnoz.
 - ${ZASADY_TRESCI}`;
 }
 
-export async function ulozPlan({ od, dni = ["pn", "sr", "pt"], uwagi = "", zamien = null }) {
+export async function ulozPlan({ od, dni = ["pn", "sr", "pt"], publikacje, uwagi = "", zamien = null, wpis = null }, generuj = claudeJson, recenzuj = generuj) {
   fs.mkdirSync(PLAN_DIR, { recursive: true });
-  const stary = fs.existsSync(plikPlanu(od)) ? JSON.parse(fs.readFileSync(plikPlanu(od), "utf8")) : null;
-  if (zamien && !stary) throw new Error("Nie ma planu na ten tydzień.");
+  const plik = plikPlanu(od);
+  const naDysku = () => fs.existsSync(plik) ? fs.readFileSync(plik, "utf8") : null;
+  const przed = naDysku(), stary = przed ? JSON.parse(przed) : null;
   const pon = data(od);
-  const wybrane = DNI.map((k, i) => [k, iso(plus(pon, i))]).filter(([k]) => dni.includes(k)).map(([, d]) => d);
-  if (!zamien && !wybrane.length) throw new Error("Wybierz choć jeden dzień publikacji.");
-  const istniejace = stary ? stary.dni.filter((d) => d.data !== zamien) : [];
-  // przy układaniu od nowa zostają wpisy już zaczęte (pomysł, rolka) i własne pomysły prowadzącej
-  const zachowane = !zamien && stary ? stary.dni.filter((d) => d.wlasny || d.pomysl || d.projekt) : [];
+  const chroniony = (d) => d.wlasny || d.pomysl || d.projekt || ["nagrane", "gotowa", "opublikowana", "pominieta"].includes(d.stan);
+  const stareDni = stary?.dni || [];
+  const kandydaci = zamien ? stareDni.filter((d) => d.data === zamien && (!wpis || d.id === wpis) && !chroniony(d)) : [];
+  if (zamien && kandydaci.length !== 1) throw new Error("Wybierz jeden wpis, którego temat chcesz zmienić.");
+  const zastepowany = kandydaci[0];
+  const uklad = zamien ? [] : rozkladPublikacji(publikacje ?? dni.map((dzien) => ({ dzien, typ_publikacji: "rolka" })));
+  const zachowane = zamien ? stareDni.filter((d) => d !== zastepowany) : stareDni.filter(chroniony);
+  const cele = zamien ? [{ data: zamien, typ_publikacji: typPublikacji(zastepowany), cel_publikacji: zastepowany.cel_publikacji || "dowolny" }]
+    : uklad.map((d) => ({ ...d, data: iso(plus(pon, DNI.indexOf(d.dzien))) }))
+      .filter((d) => !zachowane.some((z) => z.data === d.data && typPublikacji(z) === d.typ_publikacji && z.stan !== "pominieta"));
   const sasiednie = fs.readdirSync(PLAN_DIR).filter((n) => /^\d{4}-\d{2}-\d{2}\.json$/.test(n) && n.slice(0, 10) !== od && Math.abs(data(n.slice(0, 10)) - pon) <= 21 * 864e5)
     .flatMap((n) => { try { return JSON.parse(fs.readFileSync(path.join(PLAN_DIR, n), "utf8")).dni.map((d) => `- ${d.data}: ${d.tytul} (${d.format || "?"}, ${d.kategoria})`); } catch { return []; } });
-  let wynik, proba = 0;
-  while (true) {
-    const { dane, koszt, czas_s } = await claudeJson(prompt({ od, daty: zamien ? [zamien] : wybrane, uwagi, zamien, istniejace: [...istniejace, ...zachowane.filter((d) => !istniejace.includes(d))], sasiednie }) + (proba ? "\nPOPRZEDNIA WERSJA MIAŁA OBIETNICĘ EFEKTU. Bez obietnic i gwarancji." : ""), SCHEMAT, { timeout: 5 * 60 * 1000 });
-    wynik = { dane, koszt: (wynik?.koszt || 0) + koszt, czas_s: (wynik?.czas_s || 0) + czas_s };
-    if (!OBIETNICE.test(JSON.stringify(dane.dni)) || ++proba > 1) break;
+  let dane = { dni: [], motyw: stary?.motyw || "", uwagi: stary?.uwagi || "" }, koszt = 0, czas_s = 0;
+  let wynikDni;
+  for (let proba = 0; cele.length && proba < 2; proba++) {
+    const tekst = prompt({ od, cele, uwagi, zamien, istniejace: zachowane, sasiednie });
+    const r = await generuj(tekst + (proba ? "\nSprawdź wszystkie wymagane daty. Usuń obietnice efektu." : ""), SCHEMAT, { timeout: 5 * 60 * 1000 });
+    dane = r.dane; koszt += r.koszt || 0; czas_s += r.czas_s || 0;
+    const wpisy = Array.isArray(dane?.dni) ? dane.dni : [];
+    const poDacie = new Map(wpisy.map((d) => [d?.data, d]));
+    if (wpisy.length === cele.length && cele.every((d) => poprawnaRozpiska(poDacie.get(d.data), d.typ_publikacji)) && !OBIETNICE.test(JSON.stringify(wpisy))) {
+      wynikDni = poDacie;
+      break;
+    }
   }
-  const { dane } = wynik;
-  // daty pilnuje skrypt: Claude zwraca dni po kolei, przypisujemy je do wybranych dat
-  const cele = zamien ? [zamien] : wybrane;
-  const noweDni = dane.dni.slice(0, cele.length).map((d, i) => ({ ...d, data: cele[i], nagraj_dnia: /^\d{4}-\d{2}-\d{2}$/.test(d.nagraj_dnia) && d.nagraj_dnia <= cele[i] ? d.nagraj_dnia : iso(plus(data(cele[i]), -1)), stan: "plan", id: crypto.randomBytes(4).toString("hex") }));
-  oznaczPytania(noweDni.map((d) => d.pytanie_klientki).filter(Boolean), `plan ${od}`);
+  if (cele.length && !wynikDni) throw new Error("Claude nie zwrócił planu dla wszystkich wybranych dat. Plan nie został zmieniony.");
+  const noweDni = cele.map(({ data: dzien, typ_publikacji, cel_publikacji }) => {
+    const d = wynikDni.get(dzien), rolka = typ_publikacji === "rolka";
+    const { co_nagrac, ...reszta } = d;
+    const godzina = /^(?:[01]?\d|2[0-3]):[0-5]\d$/.test(d.godzina) ? d.godzina.padStart(5, "0") : "18:00";
+    const poprzedni = zastepowany || stareDni.find((x) => x.termin && x.data === dzien && typPublikacji(x) === typ_publikacji);
+    return { ...reszta, data: dzien, typ_publikacji, cel_publikacji, godzina: poprzedni?.godzina || godzina,
+      ...(rolka ? { co_nagrac } : { co_nagrac: [], plan_tresci: co_nagrac, hook_mowa: "", kiedy_nagrac: "" }),
+      nagraj_dnia: rolka ? (/^\d{4}-\d{2}-\d{2}$/.test(d.nagraj_dnia) && d.nagraj_dnia <= dzien ? d.nagraj_dnia : iso(plus(data(dzien), -1))) : "",
+      stan: "plan", id: poprzedni?.id || crypto.randomBytes(4).toString("hex"),
+    };
+  });
+  const recenzje = await recenzujPlanyPublikacji(noweDni, recenzuj);
+  koszt += recenzje.koszt; czas_s += recenzje.czas_s;
+  for (const d of noweDni) if (recenzje.wyniki.has(d.id)) d.recenzja_publikacji = recenzje.wyniki.get(d.id);
   const plan = zamien
-    ? { ...stary, dni: [...istniejace, ...noweDni].sort((a, b) => a.data.localeCompare(b.data)), koszt_usd: +(((stary.koszt_usd || 0) + wynik.koszt).toFixed(3)) }
-    : { od, do: iso(plus(pon, 6)), wygenerowano: new Date().toISOString(), motyw: dane.motyw, uwagi: dane.uwagi, ustawienia: { dni, uwagi }, okazje: okazje(pon, 24).filter((o) => o.dni_od_startu <= 13), dni: [...zachowane, ...noweDni].sort((a, b) => a.data.localeCompare(b.data)), koszt_usd: +wynik.koszt.toFixed(3) };
-  fs.writeFileSync(plikPlanu(od), JSON.stringify(plan, null, 2) + "\n");
-  return { plan, koszt: wynik.koszt, czas_s: wynik.czas_s, nowe: noweDni.map((d) => d.data) };
+    ? { ...stary, koszt_usd: +(((stary.koszt_usd || 0) + koszt).toFixed(3)) }
+    : { od, do: iso(plus(pon, 6)), wygenerowano: new Date().toISOString(), motyw: dane.motyw, uwagi: dane.uwagi, ustawienia: { dni: uklad.map((d) => d.dzien), publikacje: uklad, uwagi }, okazje: okazje(pon, 24).filter((o) => o.dni_od_startu <= 13), koszt_usd: +koszt.toFixed(3) };
+  plan.dni = [...zachowane, ...noweDni].sort((a, b) => a.data.localeCompare(b.data));
+  if (naDysku() !== przed) throw new Error("Plan zmienił się w trakcie układania. Otwórz aktualny tydzień i spróbuj ponownie.");
+  fs.writeFileSync(plik, JSON.stringify(plan, null, 2) + "\n");
+  oznaczPytania(noweDni.map((d) => d.pytanie_klientki).filter(Boolean), `plan ${od}`);
+  return { plan, koszt, czas_s, nowe: noweDni.filter(czyRolka).map((d) => d.data) };
 }
 
 export const PROG_RECENZJI = 75;
@@ -121,7 +158,7 @@ function recenzujPomysl(id, tryb) {
  *  | null (bez). Dzień dostaje scenariusz dopiero po recenzji, więc kalendarz nie pokazuje wersji sprzed poprawek. */
 export async function scenariuszeDlaPlanu(od, tylko = null, recenzja = "prog") {
   const plan = JSON.parse(fs.readFileSync(plikPlanu(od), "utf8"));
-  const dni = plan.dni.filter((d) => !d.pomysl && !d.projekt && d.stan !== "pominieta" && (!tylko || tylko.includes(d.data)));
+  const dni = plan.dni.filter((d) => czyRolka(d) && !d.termin && !d.pomysl && !d.projekt && !["pominieta", "opublikowana", "gotowa", "nagrane"].includes(d.stan) && (!tylko || tylko.includes(d.data)));
   if (!dni.length) return { ids: [], koszt: 0, czas_s: 0 };
   const { pomysly, koszt, czas_s } = await generujPomysly({ dni, od: data(od) });
   const t0 = Date.now();
@@ -143,8 +180,8 @@ export async function scenariuszeDlaPlanu(od, tylko = null, recenzja = "prog") {
   const ids = [];
   const swiezy = JSON.parse(fs.readFileSync(plikPlanu(od), "utf8")); // plan mógł się zmienić w trakcie (panel)
   for (const g of gotowe) {
-    const dz = (g.d.id && swiezy.dni.find((x) => x.id === g.d.id)) || swiezy.dni.find((x) => x.data === g.d.data);
-    if (dz && !dz.pomysl && !dz.projekt) {
+    const dz = swiezy.dni.find((x) => g.d.id ? x.id === g.d.id : x.data === g.d.data && czyRolka(x));
+    if (dz && czyRolka(dz) && !dz.pomysl && !dz.projekt && !["pominieta", "opublikowana", "gotowa", "nagrane"].includes(dz.stan)) {
       let Pteraz = g.P;
       try { Pteraz = JSON.parse(fs.readFileSync(path.join(PROJEKTY, "_pomysly", g.id, "pomysl.json"), "utf8")); } catch {}
       dz.pomysl = g.id; dz.stan = "scenariusz";
@@ -167,26 +204,38 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   if (od && !/^\d{4}-\d{2}-\d{2}$/.test(od)) blad("Zła data --od (RRRR-MM-DD).");
   od = iso(poniedzialek(od ? data(od) : a.includes("--nastepny") ? plus(new Date(), 7) : new Date()));
   const dni = (opt("dni") || "pn,sr,pt").split(",").map((s) => s.trim().toLowerCase()).filter((s) => DNI.includes(s));
+  let publikacje;
+  if (a.includes("--publikacje")) {
+    try {
+      publikacje = rozkladPublikacji((opt("publikacje") || "").split(",").map((u) => {
+        const [dzien, typ_publikacji, cel_publikacji, nadmiar] = u.trim().split(":");
+        if (nadmiar !== undefined) throw new Error("Zły zapis formatu dnia.");
+        return { dzien, typ_publikacji, cel_publikacji };
+      }));
+    } catch (e) { blad(e.message); }
+  }
   const zamien = opt("zamien");
   const trybRec = a.includes("--bez-recenzji") ? null : a.includes("--dopracuj") ? "dopracuj" : "prog";
   // Kilka tygodni naraz (kalendarz: „✦ Zaplanuj miesiąc”): --tygodnie RRRR-MM-DD,RRRR-MM-DD (poniedziałki); pomija miniona i zaplanowane.
   if (opt("tygodnie")) {
     const dzisPon = iso(poniedzialek(new Date()));
     const lista = opt("tygodnie").split(",").map((s) => s.trim()).filter((s) => /^\d{4}-\d{2}-\d{2}$/.test(s)).map((s) => iso(poniedzialek(data(s))))
-      .filter((s, i, t) => t.indexOf(s) === i && s >= dzisPon && !(fs.existsSync(plikPlanu(s)) && (JSON.parse(fs.readFileSync(plikPlanu(s), "utf8")).dni || []).some((d) => !d.wlasny)));
+      .filter((s, i, t) => t.indexOf(s) === i && s >= dzisPon && !(fs.existsSync(plikPlanu(s)) && (JSON.parse(fs.readFileSync(plikPlanu(s), "utf8")).dni || []).some((d) => !d.wlasny && !d.termin)));
     if (!lista.length) { ok("Wszystkie te tygodnie mają już plan (albo minęły)."); process.exit(0); }
-    let suma = 0;
+    let suma = 0, zakonczone = 0, bledy = 0;
     for (const [k, t] of lista.entries()) {
       try {
-        info(`\n[${k + 1}/${lista.length}] Tydzień od ${t}: ${dni.length} rolki (${dni.join(", ")})…`);
-        const { plan, koszt, nowe } = await ulozPlan({ od: t, dni, uwagi: opt("uwagi") || "" });
+        info(`\n[${k + 1}/${lista.length}] Publikacje na tydzień od ${t}…`);
+        const { plan, koszt, nowe } = await ulozPlan({ od: t, dni, publikacje, uwagi: opt("uwagi") || "" });
         suma += koszt;
+        zakonczone++;
         info(`  Motyw: ${plan.motyw}`);
         for (const d of plan.dni) info(`  ${d.data} · ${d.tytul} [${d.kategoria}, ${d.wyglad}]`);
-        if (a.includes("--scenariusze")) { const s = await scenariuszeDlaPlanu(t, nowe, trybRec); suma += s.koszt; info(`  Scenariusze: ${(s.oceny || []).join(", ")}`); }
-      } catch (e) { uwaga(`Tydzień ${t}: ${e.message}`); }
+        if (a.includes("--scenariusze") && nowe.length) { const s = await scenariuszeDlaPlanu(t, nowe, trybRec); suma += s.koszt; info(`  Scenariusze: ${(s.oceny || []).join(", ")}`); }
+      } catch (e) { bledy++; uwaga(`Tydzień ${t}: ${e.message}`); }
     }
-    ok(`Zaplanowane tygodnie: ${lista.length} (razem ${suma.toFixed(2)} USD).`);
+    if (bledy) blad(`Zapisano ${zakonczone}/${lista.length} planów. Nie wszystkie zadania AI się powiodły. Szczegóły są w logu.`);
+    ok(`Zaplanowane tygodnie: ${zakonczone} (razem ${suma.toFixed(2)} USD).`);
     process.exit(0);
   }
   if (a.includes("--tylko-scenariusze")) {
@@ -199,13 +248,13 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     process.exit(0);
   }
   try {
-    info(zamien ? `Nowy pomysł na ${zamien} (tydzień od ${od})…` : `Układam plan na tydzień od ${od}: ${dni.length} rolki (${dni.join(", ")})…`);
-    const { plan, koszt, czas_s, nowe } = await ulozPlan({ od, dni, uwagi: opt("uwagi") || "", zamien });
+    info(zamien ? `Nowy pomysł na ${zamien} (tydzień od ${od})…` : `Układam plan publikacji na tydzień od ${od}…`);
+    const { plan, koszt, czas_s, nowe } = await ulozPlan({ od, dni, publikacje, uwagi: opt("uwagi") || "", zamien, wpis: opt("wpis") });
     ok(`Plan zapisany: 01_PROJEKTY/_plan/${od}.json (${czas_s} s, ${koszt.toFixed(2)} USD)`);
     info(`Motyw: ${plan.motyw}`);
-    for (const d of plan.dni) info(`  ${d.data} · ${d.tytul} [${d.kategoria}, ${d.format}, ${d.wyglad}] nagraj: ${d.nagraj_dnia}`);
+    for (const d of plan.dni) info(`  ${d.data} · ${TYPY_PUBLIKACJI[typPublikacji(d)]?.nazwa || "Publikacja"} · ${d.tytul}${d.nagraj_dnia ? ` · nagraj ${d.nagraj_dnia}` : ""}`);
     if (plan.uwagi && !zamien) uwaga(plan.uwagi);
-    if (a.includes("--scenariusze")) {
+    if (a.includes("--scenariusze") && nowe.length) {
       info(`\nPiszę pełne scenariusze dla ${nowe.length} ${nowe.length === 1 ? "rolki" : "rolek"} (ok. 2-4 min)…`);
       const s = await scenariuszeDlaPlanu(od, nowe, trybRec);
       ok(`Scenariusze gotowe (${s.czas_s} s, ${s.koszt.toFixed(2)} USD), oceny: ${(s.oceny || []).join(", ")}`);

@@ -9,18 +9,19 @@
 // Ok. 1-2 min, darmowe (lokalnie).
 import fs from "node:fs";
 import path from "node:path";
-import { ROOT, blad, ok, info, uwaga, znajdzProjekt, uruchom, hf, wczytajConfig } from "./lib.mjs";
+import { ROOT, blad, ok, info, uwaga, znajdzProjekt, uruchom, hf, wczytajConfig, katalogProbyMontazu, znacznikiKontroli } from "./lib.mjs";
 
 const args = process.argv.slice(2);
 const proj = znajdzProjekt(args.find((a) => !a.startsWith("--")));
-const komp = path.join(proj, "kompozycja"), RJ = path.join(komp, "rolka.json"), IDX = path.join(komp, "index.html");
+const proba = katalogProbyMontazu(proj, args);
+const komp = proba || path.join(proj, "kompozycja"), RJ = path.join(komp, "rolka.json"), IDX = path.join(komp, "index.html");
 const kat = path.join(komp, "kontrola");
 const pl = (x) => String(Math.round(x * 10) / 10).replace(".", ",");
 const cfg = wczytajConfig();
 
 if (!fs.existsSync(IDX) || (fs.existsSync(RJ) && fs.statSync(RJ).mtimeMs > fs.statSync(IDX).mtimeMs)) {
   info("Składam rolkę (rolka.json jest nowsza niż kompozycja) ...");
-  const z = uruchom(process.execPath, [path.join(ROOT, "scripts", "zloz.mjs"), proj, "--force"], { cicho: true, timeout: 20 * 60 * 1000 });
+  const z = uruchom(process.execPath, [path.join(ROOT, "scripts", "zloz.mjs"), proj, ...(proba ? [`--audyt=${path.basename(proba)}`] : [])], { cicho: true, timeout: 20 * 60 * 1000 });
   if (z.code !== 0) blad("Złożenie rolki się nie udało.", (z.stdout + z.stderr).slice(-400));
 }
 fs.rmSync(kat, { recursive: true, force: true });
@@ -54,25 +55,30 @@ const py = process.platform === "win32" ? "python" : "python3";
 const r = uruchom(py, [path.join(ROOT, "scripts", "kontrola_obrazu.py"), pelnyMp4, czystyMp4, ust, kat], { cicho: true, timeout: 20 * 60 * 1000 });
 if (r.code !== 0) blad("Analiza klatek się nie udała.", (r.stderr || "").slice(-500));
 const wynik = JSON.parse(r.stdout.trim().split("\n").pop());
-for (const f of [pelnyMp4, czystyMp4, ust]) fs.rmSync(f, { force: true });
+for (const f of [czystyMp4, ust, ...(proba ? [] : [pelnyMp4])]) fs.rmSync(f, { force: true });
 
 // --- hyperframes check: kontrast tekstu, tekst poza kadrem, błędy w przeglądarce ---
 info("Kontrast i układ tekstu (hyperframes check) ...");
 const c = hf(["check", "--json", "--no-craft", "--samples", "12"], { cwd: komp, cicho: true, timeout: 15 * 60 * 1000 });
 let check = null;
-try { check = JSON.parse(c.stdout.slice(c.stdout.indexOf("{"))); } catch { uwaga("hyperframes check nie zwrócił wyniku, pomijam kontrast."); }
-const NAZWY = { contrast: "kontrast", layout: "uklad", runtime: "blad" };
+try { check = JSON.parse(c.stdout.slice(c.stdout.indexOf("{"))); } catch {}
+const dzialy = ["lint", "runtime", "layout", "contrast", "audio"];
+const sprawdzonoUklad = !check?.browserSkipped && Array.isArray(check?.layout?.samples) && check.layout.samples.length > 0
+  && dzialy.every((d) => Array.isArray(check[d]?.findings));
+if (!sprawdzonoUklad) uwaga("HyperFrames nie ukończył sprawdzania układu i kontrastu.");
+const NAZWY = { lint: "blad", contrast: "kontrast", layout: "uklad", runtime: "blad", audio: "dzwiek" };
 for (const [k, typ] of Object.entries(NAZWY)) {
   for (const f of check?.[k]?.findings || []) {
     if (f.severity && !/error|warn/i.test(f.severity)) continue;
     // styl napisów „Perła”: słowa jeszcze niewypowiedziane są celowo przygaszone (#b9a69c), to nie błąd
     if (typ === "kontrast" && /napisy/.test(f.sourceFile || "") && /185,\s*166,\s*156/.test(f.fg || "")) continue;
     const t = Number(f.time ?? f.at ?? f.t ?? f.sampleTime ?? f.times?.[0] ?? 0) || 0;
-    const scena = String(f.sourceFile || "").replace(/^compositions\//, "").replace(/\.html$/, "");
+    const scena = f.sourceFile ? path.basename(f.sourceFile, ".html") : "";
     let opis;
     if (typ === "kontrast" && f.ratio) opis = `Słaby kontrast tekstu „${String(f.text || "").slice(0, 40)}”${scena ? ` (${scena})` : ""}: ${pl(f.ratio)}:1, potrzeba min. ${f.requiredRatio || 3}:1${f.suggestedColor ? `, np. kolor ${f.suggestedColor}` : ""}`;
-    else opis = `${{ kontrast: "Słaby kontrast tekstu", uklad: "Tekst poza miejscem", blad: "Błąd w kompozycji" }[typ]}${scena ? ` (${scena})` : ""}: ${String(f.message || f.summary || f.code || "").replace(/\s+/g, " ").slice(0, 200)}`;
-    wynik.problemy.push({ typ, od: t, do: t + 0.5, opis, ile: 1, kod: f.code || null, ...(f.bbox ? { ramka: f.bbox } : {}) });
+    else opis = `${{ kontrast: "Słaby kontrast tekstu", uklad: "Tekst poza miejscem", blad: "Błąd w kompozycji", dzwiek: "Dźwięk" }[typ]}${scena ? ` (${scena})` : ""}: ${String(f.message || f.summary || f.code || "").replace(/\s+/g, " ").slice(0, 200)}`;
+    const problem = { typ, od: t, do: t + 0.5, opis, ile: 1, kod: f.code || null, ...(f.bbox ? { ramka: f.bbox } : {}) };
+    if (!wynik.problemy.some((p) => p.typ === typ && p.od === t && p.opis === opis)) wynik.problemy.push(problem);
   }
 }
 
@@ -93,16 +99,16 @@ const PROPOZYCJA = {
 for (const p of wynik.problemy) { p.waga = WAGA[p.typ] || "wazne"; p.propozycja = PROPOZYCJA[p.typ] || ""; }
 wynik.problemy.sort((a, b) => a.od - b.od);
 const ocena = Math.max(0, 100 - wynik.problemy.reduce((s, p) => s + ({ krytyczne: 20, wazne: 8, kosmetyka: 3 }[p.waga] || 5), 0));
-const zapis = { data: new Date().toISOString(), klatek: wynik.klatek, ocena, problemy: wynik.problemy };
+const zakres = { twarze: wynik.twarze === true, hyperframes: sprawdzonoUklad };
+const zapis = { data: new Date().toISOString(), klatek: wynik.klatek, ocena, zakres, problemy: wynik.problemy };
 fs.writeFileSync(path.join(komp, "kontrola-obrazu.json"), JSON.stringify(zapis, null, 2));
 
-if (args.includes("--znaczniki") && wynik.problemy.length) {
+if (args.includes("--znaczniki")) {
   const rolka = JSON.parse(fs.readFileSync(RJ, "utf8"));
-  rolka.znaczniki = (rolka.znaczniki || []).filter((z) => !(z.autor === "kontrola" && z.stan !== "zrobione"));
-  wynik.problemy.forEach((p, k) => rolka.znaczniki.push({ id: `k${Date.now().toString(36)}${k}`, t: Math.round(p.od * 10) / 10, tekst: `${p.opis} (${pl(p.od)}-${pl(p.do)} s)`, propozycja: p.propozycja, waga: p.waga, autor: "kontrola", stan: "do zrobienia" }));
-  fs.writeFileSync(RJ, JSON.stringify(rolka, null, 2));
-  info(`Dodano ${wynik.problemy.length} znaczników „kontrola” (krok Sceny: „✦ Claude: popraw znaczniki”).`);
+  const stare = rolka.znaczniki || [];
+  rolka.znaczniki = znacznikiKontroli(stare, wynik.problemy);
+  if (wynik.problemy.length || rolka.znaczniki.length !== stare.length) fs.writeFileSync(RJ, JSON.stringify(rolka, null, 2));
 }
 for (const p of wynik.problemy) console.log(`${{ krytyczne: "✗", wazne: "!", kosmetyka: "·" }[p.waga]} ${pl(p.od)}-${pl(p.do)} s: ${p.opis}`);
-if (!wynik.problemy.length) ok(`Obraz bez zastrzeżeń (${wynik.klatek} klatek).`);
+if (!wynik.problemy.length && zakres.twarze && zakres.hyperframes) ok(`Obraz bez zastrzeżeń (${wynik.klatek} klatek).`);
 ok(`Kontrola obrazu: ${ocena}/100 · ${wynik.problemy.length} problemów · kompozycja/kontrola-obrazu.json`);

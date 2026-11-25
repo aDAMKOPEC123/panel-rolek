@@ -33,10 +33,19 @@
 
     <aside id="claude" class="claude ukryte">
       <div class="claude-gora"><h3>Poproś Claude</h3><button id="claudeZamknij" class="btn maly jasny">✕</button></div>
+      <div class="claude-montaz">
+        <div class="rzad">
+          <button type="button" id="claudeDobierz" class="btn" data-zadanie>✦ Dobierz montaż</button>
+          <button type="button" id="claudeKatalog" class="btn jasny">Wszystkie opcje</button>
+          <button type="button" id="claudeBrief" class="btn jasny">Brief i preferencje</button>
+        </div>
+        <p id="claudeDobierzHint" class="podpowiedz"></p>
+        <div id="claudeDobor" aria-live="polite"></div>
+      </div>
       <button class="btn dokoncz" data-asystent style="width:100%;margin-bottom:12px">✦ Poprowadź mnie pytaniami (dokończ rolkę)</button>
       <div id="claudeChipy" class="chipy"></div>
       <textarea id="claudeTekst" rows="5" placeholder="Napisz, co Claude ma zrobić. Kontekst rolki doklejam sama."></textarea>
-      <details><summary>Pełny prompt, który zostanie wysłany</summary><pre id="claudePelny" class="log"></pre></details>
+      <details><summary>Polecenie dla Claude</summary><pre id="claudePelny" class="log"></pre></details>
       <div class="rzad">
         <button id="claudeKopiuj" class="btn jasny">Kopiuj prompt</button>
         <button id="claudeWyslij" class="btn">Wyślij do Claude</button>
@@ -60,11 +69,17 @@
     <script src="vendor/hyperframes-player.global.js"></script>
     <script src="edytor.js"></script>
     <script src="licencja.js"></script>
+    <script src="szukaj-ujec.js"></script>
+    <script src="brief-ai.js"></script>
+    <script src="rezyseria.js"></script>
+    <script src="ai-montaz.js"></script>
+    <script src="audyt-autopilota.js"></script>
     <script src="app.js"></script>
     <script src="stylistyka.js"></script>
     <script src="telefon.js"></script>
     <script src="prosty.js"></script>
     <script src="kreator.js"></script>
+    <script src="jakosc-publikacji.js"></script>
     <script src="plan.js"></script>
     <script src="pomysly.js"></script>
     <script src="instagram.js"></script>

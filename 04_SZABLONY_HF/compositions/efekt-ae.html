@@ -27,7 +27,8 @@
     {"id":"promien","type":"number","label":"Wielkość ramki (px)","default":170,"min":60,"max":420,"step":5},
     {"id":"pozycja","type":"enum","label":"Pozycja napisu","default":"srodek","options":[{"value":"gora","label":"Góra"},{"value":"srodek","label":"Środek"},{"value":"dol","label":"Dół (nad napisami)"}]},
     {"id":"kolor","type":"enum","label":"Kolor","default":"zloto","options":[{"value":"zloto","label":"Złoto (akcent)"},{"value":"bialy","label":"Biały"},{"value":"granat","label":"Granat"}]},
-    {"id":"rozmiar","type":"number","label":"Rozmiar liter (px)","default":84,"min":40,"max":150,"step":2}
+    {"id":"rozmiar","type":"number","label":"Rozmiar liter (px)","default":84,"min":40,"max":150,"step":2},
+    {"id":"cienka","type":"boolean","label":"Cienka linia","default":false}
   ]'
 >
   <head>
@@ -109,7 +110,7 @@
             var rysuj = function (p, d, szer, t0, dur, ease) {
               p.setAttribute("d", d);
               p.setAttribute("stroke", v.kolor === "bialy" ? "#ffffff" : v.kolor === "granat" ? "#0B4178" : getComputedStyle(clip).getPropertyValue("--akcent").trim() || "#C8A15F");
-              p.setAttribute("stroke-width", szer);
+              p.setAttribute("stroke-width", v.cienka === true || v.cienka === "true" ? szer * 0.55 : szer);
               p.style.filter = "drop-shadow(0 3px 8px rgba(0,0,0,0.35))";
               var L = p.getTotalLength ? p.getTotalLength() : 1500;
               tl.fromTo(p, { strokeDasharray: L, strokeDashoffset: L }, { strokeDashoffset: 0, duration: dur, ease: ease || "power2.inOut" }, t0);

@@ -7,24 +7,48 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import {
-  ROOT, SZABLONY_HF, BRAND, blad, ok, info, uwaga, wczytajConfig, czyTodo, znajdzProjekt, wczytajRolke,
-  podlinkuj, ffprobe, uruchom, ROZSZ_WIDEO, ROZSZ_OBRAZ,
+  ROOT, SZABLONY_HF, BRAND, blad, ok, info, uwaga, wczytajConfig, czyTodo, znajdzProjekt, wczytajRolke, czytajBrief,
+  podlinkuj, ffprobe, uruchom, ROZSZ_WIDEO, ROZSZ_OBRAZ, katalogProbyMontazu,
 } from "./lib.mjs";
 import { naciskGlosu } from "./nacisk-glosu.mjs";
 import { sciezkaKamery } from "./operator-kamery.mjs";
 import { zastosujStyl } from "./style-marki.mjs";
 import { czyNaturalny, naturalnyMontaz } from "./montaz-naturalny.mjs";
+import { stylMontazu, zastosujStylMontazu } from "./style-montazu.mjs";
 import { mapaTwarzy, punktyKotwicy, pozycjaKotwicy, klatkiTwarzy, wielkoscTwarzy } from "./twarz-dane.mjs";
 
 const args = process.argv.slice(2);
 const force = args.includes("--force");
 const proj = znajdzProjekt(args.find((a) => !a.startsWith("--")));
-const KOMP = path.join(proj, "kompozycja");
-const rolkaPlik = wczytajRolke(proj);
+const baza = path.join(proj, "kompozycja");
+const probaMontazu = katalogProbyMontazu(proj, args);
+const podgladStylu = args.find((a) => a.startsWith("--podglad-stylu="))?.slice("--podglad-stylu=".length);
+if (podgladStylu != null && !stylMontazu(podgladStylu)) blad("Nieznany styl do podglądu.");
+const KOMP = probaMontazu || (podgladStylu ? path.join(baza, ".podglady-stylow", podgladStylu) : baza);
+let rolkaPlik = probaMontazu ? JSON.parse(fs.readFileSync(path.join(probaMontazu, "rolka.json"), "utf8")) : wczytajRolke(proj);
+if (podgladStylu) {
+  const maUjecie = rolkaPlik.ujecia?.some((u) => u.src && fs.existsSync(path.resolve(proj, u.src)));
+  if (!maUjecie) {
+    const kat = path.join(proj, "proxy");
+    const klipy = fs.existsSync(kat) ? fs.readdirSync(kat, { withFileTypes: true })
+      .filter((f) => f.isFile() && ROZSZ_WIDEO.test(f.name)).slice(0, 3) : [];
+    if (!klipy.length) blad("Brak materiału do podglądu.", "Przygotuj nagrania w kroku Nagrania.");
+    const ujecia = klipy.map((f) => ({ src: `proxy/${f.name}`, od: 0, do: Math.min(3, ffprobe(path.join(kat, f.name)).duration), dzwiek: true }));
+    const tytulBrief = czytajBrief(proj).pola["tytuł roboczy"];
+    const tekst = [rolkaPlik.tytul, tytulBrief].find((s) => typeof s === "string" && !czyTodo(s));
+    const sceny = [];
+    if (tekst) {
+      const krotki = tekst.split(/\s+/).slice(0, 6).join(" ").slice(0, 54);
+      sceny.push({ szablon: "hook-tytul", start: 0, czas: 2, dane: { tekst: krotki } });
+    }
+    rolkaPlik = { styl: rolkaPlik.styl, ujecia, sceny };
+  }
+}
 // Montaż naturalny (rolka.json -> montaz: "naturalny"): wygląd vlogerki zamiast reklamy. Przeróbka tylko w pamięci,
 // rolka.json zostaje bez zmian (scripts/montaz-naturalny.mjs).
-const NAT = czyNaturalny(rolkaPlik) ? naturalnyMontaz(rolkaPlik) : null;
-const rolka = NAT ? NAT.rolka : rolkaPlik;
+const STYL_MONTAZU = stylMontazu(podgladStylu || rolkaPlik.montaz);
+const NAT = !STYL_MONTAZU && czyNaturalny(rolkaPlik) ? naturalnyMontaz(rolkaPlik) : null;
+const rolka = STYL_MONTAZU ? zastosujStylMontazu(rolkaPlik, STYL_MONTAZU) : NAT?.rolka || rolkaPlik;
 // Stylistyka rolki (rolka.json -> styl, 02_BRAND/style/<id>): kolory, fonty, logo, znak wodny, marka, ruch, napisy.
 const cfg = zastosujStyl(wczytajConfig(), rolka.styl);
 const LOGO = cfg.styl.logo, ZNAK = cfg.styl.watermark;
@@ -33,6 +57,9 @@ const GLOSNOSC = Number(rolka.glosnosc ?? 1);
 const vol = (v) => r3(Number(v) * GLOSNOSC);
 // Efekty montażu: każdy Tak/Nie w panelu (krok Styl). Brak pola = Nie.
 const ef = rolka.efekty || {};
+const porownanie = Number(rolka.format) === 1 || rolka.sceny?.some((s) => s.szablon === "przed-po");
+const grading = (src) => STYL_MONTAZU?.grading && !porownanie && /^proxy[\\/]/i.test(src || "")
+  ? ` data-color-grading='${JSON.stringify(STYL_MONTAZU.grading)}'` : "";
 const FPS = Number(cfg.rolka?.fps || 30);
 const W = 1080, H = 1920;
 const r3 = (x) => Math.round(x * 1000) / 1000;
@@ -78,6 +105,10 @@ for (const f of fs.readdirSync(path.join(KOMP, "compositions"))) {
 function asset(rel) {
   if (!rel) return null;
   if (/^assets\//.test(rel) && fs.existsSync(path.join(KOMP, rel))) return rel;
+  if (probaMontazu && /^assets\//.test(rel) && fs.existsSync(path.join(baza, rel))) {
+    podlinkuj(path.join(baza, rel), path.join(KOMP, rel));
+    return rel;
+  }
   const src = path.isAbsolute(rel) ? rel : path.join(proj, rel);
   if (!fs.existsSync(src)) blad(`Brak pliku: ${rel}`, "Sprawdź ścieżkę w rolka.json (ścieżki są względem folderu rolki, np. proxy/IMG_0001.mp4).");
   const relOut = path.isAbsolute(rel) ? path.join("ext", path.basename(rel)) : rel;
@@ -91,17 +122,19 @@ if (fs.existsSync(demoDir)) for (const f of fs.readdirSync(demoDir)) podlinkuj(p
 
 // --- brand ---
 const k = cfg.kolory || {};
-const f = cfg.fonty || {};
+const f = STYL_MONTAZU?.fonty || cfg.fonty || {};
 const sz = cfg.safe_zone || {};
 let fontFace = "";
+const rodzinyFontow = new Set();
 for (const [klucz, rola] of [["plik_naglowki", "naglowki"], ["plik_tekst", "tekst"]]) {
   if (f[klucz]) {
     const src = path.join(BRAND, "fonty", f[klucz]);
     if (!fs.existsSync(src)) blad(`Brak fontu 02_BRAND/fonty/${f[klucz]}`, "Wrzuć plik albo ustaw null w config.json -> fonty.");
     podlinkuj(src, path.join(KOMP, "assets", "fonts", f[klucz]));
     fontFace += `@font-face{font-family:"${f[rola]}";src:url("assets/fonts/${f[klucz]}");font-display:block}\n`;
-  }
+  } else if (f[rola]) rodzinyFontow.add(f[rola]);
 }
+const fontyGoogle = [...rodzinyFontow].map((n) => `family=${encodeURIComponent(n).replace(/%20/g, "+")}:ital,wght@0,400;0,500;0,600;0,700;1,400;1,700`).join("&amp;");
 const handle = czyTodo(cfg.gabinet?.instagram) ? "@twoj_gabinet" : (cfg.gabinet.instagram.startsWith("@") ? cfg.gabinet.instagram : "@" + cfg.gabinet.instagram);
 if (czyTodo(cfg.gabinet?.instagram)) uwaga("config.json: gabinet.instagram = TODO, wstawiam @twoj_gabinet.");
 const nazwaGab = czyTodo(cfg.gabinet?.nazwa) ? "Twój Gabinet" : cfg.gabinet.nazwa;
@@ -155,7 +188,7 @@ ujecia.forEach((u, i) => {
   const tempoU = Math.min(8, Math.max(0.25, Number(u.tempo) || 1));
   const prev = uj[i - 1];
   const zakladka = prev && ZAKLADKA[prev.przejscie] ? Math.min(ZAKLADKA[prev.przejscie], prev.dur * 0.5) : 0;
-  let czas, src = null, typ;
+  let czas, src = null, typ, dzwiekUjecia = u.dzwiek;
   if (u.src) {
     src = asset(u.src);
     const pelne = path.isAbsolute(u.src) ? u.src : path.join(proj, u.src);
@@ -163,6 +196,7 @@ ujecia.forEach((u, i) => {
     else if (ROZSZ_WIDEO.test(u.src)) {
       typ = "wideo";
       const info0 = ffprobe(pelne);
+      if (dzwiekUjecia == null && STYL_MONTAZU?.dzwiekUjec && !rolka.voiceover?.src) dzwiekUjecia = info0.hasAudio;
       const od = Number(u.od || 0);
       const doo = u.do != null ? Math.min(Number(u.do), info0.duration) : info0.duration;
       if (doo <= od) blad(`Ujęcie ${i + 1}: "do" (${doo}) musi być większe niż "od" (${od}).`, "Popraw czasy w rolka.json.");
@@ -179,8 +213,8 @@ ujecia.forEach((u, i) => {
   if (u.przejscie_po && !PRZEJSCIA.includes(u.przejscie_po)) uwaga(`Ujęcie ${i + 1}: nieznane przejście "${u.przejscie_po}". Dostępne: ${PRZEJSCIA.join(", ")}. Daję cięcie.`);
   const start = naKlatke(Math.max(0, t - zakladka));
   const dur = naKlatke(czas);
-  if (tempoU !== 1 && u.dzwiek) uwaga(`Ujęcie ${i + 1}: przyspieszone (tempo ${tempoU}), więc bez dźwięku.`);
-  uj.push({ i: i + 1, typ, src, start, dur, end: r3(start + dur), od: Number(u.od || 0), tempo: tempoU, skala: Number(u.skala) || 1, grupa: u.grupa, przebitki: u.przebitki, sledzenie: u.sledzenie, obiekty: u.obiekty, zoom_na: u.zoom_na, kadr: u.kadr, przejscie, wyciecie: wyciecie ? asset(wyciecie) : null, kierunek: u.przejscie_kierunek, dzwiek: !!u.dzwiek && tempoU === 1, wczesniej: Math.max(0, Math.min(1, Number(u.dzwiek_wczesniej) || 0)), foley: Array.isArray(u.foley) ? u.foley : [], glosnosc: u.glosnosc ?? 1, kolor: u.kolor, etykieta: u.etykieta || "", zrodlo: u.src });
+  if (tempoU !== 1 && dzwiekUjecia) uwaga(`Ujęcie ${i + 1}: przyspieszone (tempo ${tempoU}), więc bez dźwięku.`);
+  uj.push({ i: i + 1, typ, src, start, dur, end: r3(start + dur), od: Number(u.od || 0), tempo: tempoU, skala: Number(u.skala) || 1, grupa: u.grupa, przebitki: u.przebitki, sledzenie: u.sledzenie, obiekty: u.obiekty, zoom_na: u.zoom_na, kadr: u.kadr, przejscie, wyciecie: wyciecie ? asset(wyciecie) : null, kierunek: u.przejscie_kierunek, dzwiek: !!dzwiekUjecia && tempoU === 1, wczesniej: Math.max(0, Math.min(1, Number(u.dzwiek_wczesniej) || 0)), foley: Array.isArray(u.foley) ? u.foley : [], glosnosc: u.glosnosc ?? 1, kolor: u.kolor, etykieta: u.etykieta || "", zrodlo: u.src });
   t = start + dur;
 });
 const koniecUjec = uj.length ? uj[uj.length - 1].end : 0;
@@ -240,7 +274,8 @@ for (const [klucz, dom] of [["voiceover", 1], ["muzyka", 0.18]]) {
   const d = ffprobe(path.join(KOMP, src)).duration;
   // "od": start w pliku (np. przycięta cisza przed pierwszym słowem lektora, scripts/kontrola-hooka.mjs --napraw)
   const odA = Math.max(0, Math.min(d - 0.5, Number(a.od) || 0));
-  audio.push({ id: klucz === "voiceover" ? "vo" : "muzyka", src, zrodlo: a.src, start: Number(a.start || 0), od: odA, dur: r3(d - odA), vol: Number(a.glosnosc ?? dom), fadeOut: klucz === "muzyka" ? 0.8 : 0 });
+  const mnoznik = klucz === "muzyka" ? STYL_MONTAZU?.muzyka ?? 1 : 1;
+  audio.push({ id: klucz === "voiceover" ? "vo" : "muzyka", src, zrodlo: a.src, start: Number(a.start || 0), od: odA, dur: r3(d - odA), vol: Number(a.glosnosc ?? dom) * mnoznik, fadeOut: klucz === "muzyka" ? 0.8 : 0 });
 }
 
 // --- długość całości ---
@@ -452,6 +487,7 @@ function napisyZNaciskiem(slowa) {
     slow_w_grupie: np.slow_w_grupie || cfg.napisy?.slow_w_grupie || 4,
     emoji: !!ef.emoji,
     nacisk: np.nacisk !== false && !!st?.zmierzone,
+    ...(np.frazy ? { frazy: true } : {}),
   }, "captions");
 }
 // --- watermark ---
@@ -603,8 +639,8 @@ for (const { pb, st, cz } of listaPb) {
     if (pb.przejscie === "przenikanie") tweens.push(`tl.fromTo("#pb${nPrz}-w", { opacity: 0 }, { opacity: 1, duration: ${PB_FADE}, ease: "power1.inOut" }, ${st});`);
     const tp = Math.min(8, Math.max(0.25, Number(pb.tempo) || 1));
     const el = ROZSZ_WIDEO.test(pb.src)
-      ? `<video id="pb${nPrz}" class="clip uj-media" src="${src}" data-start="${st}" data-duration="${cz}" data-media-start="${r3(Number(pb.od || 0))}"${tp !== 1 ? ` data-playback-rate="${tp}"` : ""} data-track-index="${100 + nPrz}" muted playsinline></video>`
-      : `<img id="pb${nPrz}" class="clip uj-media" src="${src}" data-start="${st}" data-duration="${cz}" data-track-index="${100 + nPrz}" alt="" />`;
+      ? `<video id="pb${nPrz}" class="clip uj-media" src="${src}" data-start="${st}" data-duration="${cz}" data-media-start="${r3(Number(pb.od || 0))}"${tp !== 1 ? ` data-playback-rate="${tp}"` : ""} data-track-index="${100 + nPrz}"${grading(pb.src)} muted playsinline></video>`
+      : `<img id="pb${nPrz}" class="clip uj-media" src="${src}" data-start="${st}" data-duration="${cz}" data-track-index="${100 + nPrz}"${grading(pb.src)} alt="" />`;
     przebitkiHtml.push(`<div id="pb${nPrz}-w" class="uj" style="z-index:${uj.length + 3}">
         ${el}
       </div>`);
@@ -869,7 +905,7 @@ if (ef.zajawka && D > 4) {
     } else el = `<img id="zajawka" class="clip uj-media" src="${src}" data-start="0" data-duration="${ZAJ}" data-track-index="9" alt="" />`;
     efektyHtml.push(`<div id="zajawka-w" class="uj" style="z-index:${uj.length + 2}">\n        ${wKadrze(zkadr, el)}\n        <div id="zajawka-flash" style="position:absolute;inset:0;background:#fff;opacity:0"></div>\n      </div>`);
     tweens.push(`tl.fromTo("#zajawka", { scale: 1.12 }, { scale: 1, duration: ${ZAJ}, ease: "power1.out" }, 0);`);
-    tweens.push(`tl.fromTo("#zajawka-flash", { opacity: 0.85 }, { opacity: 0, duration: 0.3, ease: "power2.out", immediateRender: false }, ${r3(ZAJ - 0.08)});`);
+    if (STYL_MONTAZU?.id !== "editorial") tweens.push(`tl.fromTo("#zajawka-flash", { opacity: 0.85 }, { opacity: 0, duration: 0.3, ease: "power2.out", immediateRender: false }, ${r3(ZAJ - 0.08)});`);
     zajawka = { src: zsrc, od: zod };
     zmiany.push(ZAJ);
     efektyOpis.push(`zajawka efektu (${path.basename(zsrc)})`);
@@ -1148,7 +1184,7 @@ const ujHtml = uj.map((u, n) => {
     const w = u.dzwiek && n > 0 ? Math.min(u.wczesniej, u.od, uj[n - 1].dur - 0.1) : 0;
     if (w > 0.02) efektyHtml.push(`<audio id="uja${u.i}" class="clip" src="${u.src}" data-start="${r3(u.start - w)}" data-duration="${r3(u.dur + w)}" data-media-start="${r3(u.od - w)}" data-track-index="${30 + u.i}" data-volume="${vol(u.glosnosc)}"></audio>`);
     const dzw = u.dzwiek && !(w > 0.02) ? `data-has-audio="true" data-volume="${vol(u.glosnosc)}"` : "muted";
-    el = `<video id="u${u.i}" class="clip uj-media" src="${u.src}" data-start="${u.start}" data-duration="${u.dur}" data-media-start="${r3(u.od)}"${u.tempo !== 1 ? ` data-playback-rate="${u.tempo}"` : ""} data-track-index="1" ${dzw} playsinline></video>`;
+    el = `<video id="u${u.i}" class="clip uj-media" src="${u.src}" data-start="${u.start}" data-duration="${u.dur}" data-media-start="${r3(u.od)}"${u.tempo !== 1 ? ` data-playback-rate="${u.tempo}"` : ""} data-track-index="1"${grading(u.zrodlo)} ${dzw} playsinline></video>`;
   } else if (u.typ === "obraz") {
     el = `<img id="u${u.i}" class="clip uj-media" src="${u.src}" data-start="${u.start}" data-duration="${u.dur}" data-track-index="1" alt="" />`;
   } else {
@@ -1170,6 +1206,7 @@ const html = `<!doctype html>
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=${W}, height=${H}" />
+    ${fontyGoogle ? `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?${fontyGoogle}&amp;display=block" />` : ""}
     <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
     <style>
       ${fontFace}:root {
@@ -1265,6 +1302,7 @@ fs.writeFileSync(STAN, JSON.stringify({ indexHash: hash(INDEX), data: new Date()
 
 ok(`Złożono ${path.relative(ROOT, INDEX)}`);
 if (NAT) info(`  montaż naturalny (jak vlog): ${NAT.zmiany.length ? NAT.zmiany.join(" · ") : "nic do zmiany"}`);
+if (STYL_MONTAZU) info(`  styl montażu: ${STYL_MONTAZU.nazwa}`);
 info(`  długość: ${String(Math.round(D * 10) / 10).replace(".", ",")} s · ujęcia: ${uj.length} · sceny: ${sceny.length} · słowa w napisach: ${liczbaSlow} · audio: ${audio.map((a) => a.id).join(", ") || "brak (dźwięk z ujęć albo brak)"}`);
 if (efektyOpis.length) info(`  efekty: ${efektyOpis.join(" · ")}`);
 if (!audio.some((a) => a.id === "muzyka")) info("  muzyka: brak w renderze (dodaj z biblioteki z licencją albo w aplikacji Instagrama).");

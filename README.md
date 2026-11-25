@@ -18,7 +18,7 @@ Aplikacja do robienia rolek na Instagram i TikTok dla gabinetu beauty: od nagra�
    ```powershell
    python -m pip install opencv-python numpy
    python -m pip install --no-deps mediapipe absl-py
-   python -m pip install onnxruntime ultralytics faster-whisper
+   python -m pip install onnxruntime tokenizers ultralytics faster-whisper
    ```
 3. Rozpakuj paczkę `panel-rolek_<data>.zip` od autora (albo pobierz repozytorium, jeśli masz do niego dostęp), np. na Pulpit. W paczce jest też `JAK_ZAINSTALOWAC.txt`.
 4. Uruchom **`Uruchom panel.bat`**. Otworzy się przeglądarka z panelem.
@@ -33,7 +33,7 @@ Aplikacja do robienia rolek na Instagram i TikTok dla gabinetu beauty: od nagra�
    npm install -g @anthropic-ai/claude-code
    python3 -m pip install --user --break-system-packages opencv-python numpy
    python3 -m pip install --user --break-system-packages --no-deps mediapipe absl-py
-   python3 -m pip install --user --break-system-packages onnxruntime ultralytics faster-whisper
+   python3 -m pip install --user --break-system-packages onnxruntime tokenizers ultralytics faster-whisper
    ```
    Zaloguj Claude Code: `claude`. (`--break-system-packages` jest potrzebne, bo Python z Homebrew nie pozwala instalować bibliotek bez tego; `--user` kładzie je w katalogu użytkownika.)
 2. Rozpakuj paczkę i uruchom **`Uruchom panel.command`**: za pierwszym razem prawy przycisk > Otwórz (plik z internetu), później dwuklik.
@@ -43,6 +43,24 @@ Na Macu upscaling AI (Real-ESRGAN) i slow motion RIFE potrzebują wersji tych pr
 
 Skille HyperFrames dla Claude (montaż): `npx hyperframes skills update`.
 Modele AI do efektów dodatkowych (mapa twarzy, zdjęcie 3D, wycinanie obiektów, upscaling) trafiają do folderu `narzedzia/`; opis w `CLAUDE.md` (sekcja „Jak to działa”).
+
+## Aktualizacja istniejącej instalacji
+
+1. Zamknij okno, z którego uruchamiasz panel.
+2. Pobierz `panel-rolek.zip` i rozpakuj paczkę do **osobnego folderu**. [Pobierz najnowszą wersję](https://github.com/aDAMKOPEC123/panel-rolek/releases/latest/download/panel-rolek.zip)
+3. Otwórz w nowym folderze **Aktualizuj panel.bat** (Windows) lub **Aktualizuj panel.command** (Mac). Wklej ścieżkę do folderu dotychczasowej instalacji.
+4. Uruchom panel z dotychczasowego folderu.
+
+Aktualizator zachowuje projekty, nagrania, kalendarz, bibliotekę, ustawienia marki i aktywację licencji. Zastąpione pliki aplikacji trafiają do kopii `.kopia-aktualizacji-*` w folderze instalacji.
+
+Na Macu możesz też uruchomić aktualizator z Terminala poleceniem `node scripts/aktualizuj.mjs "/ścieżka/do/starej/instalacji"` z folderu rozpakowanej paczki.
+
+Jeśli masz instalację sklonowaną przez Git, zaktualizuj ją w terminalu na gałęzi `main`.
+
+```sh
+git fetch origin main
+git merge --ff-only --no-overwrite-ignore origin/main
+```
 
 ## Co jest w repozytorium, a czego nie ma
 
@@ -56,7 +74,7 @@ Wszystko to jest w `.gitignore`.
 
 ## Dla autora: paczka do wysłania
 
-`npm run paczka` robi na Pulpicie `panel-rolek_<data>.zip`: dokładnie ostatni commit (`git archive`), plus `JAK_ZAINSTALOWAC.txt` i `WERSJA.txt`. Odbiorczyni nie potrzebuje konta na GitHubie: wysyłasz paczkę linkiem (Google Drive, WeTransfer) razem z jednym kodem. Przed wysłaniem skrypt sprawdza, czy w ZIP-ie nie ma prywatnych plików. Nowa wersja: commit, `npm run paczka`, wyślij; odbiorczyni rozpakowuje w miejsce starej (nagrania, ustawienia i aktywacja zostają).
+`npm run paczka` tworzy na Pulpicie `panel-rolek_<data>.zip` z ostatniego commita, instrukcją i spisem plików do aktualizacji. Skrypt sprawdza zawartość przed zapisaniem ZIP-a. Możesz podać ścieżkę przez `npm run paczka -- --out .wydania/panel-rolek.zip`. Aby działał stały link do pobrania, dołącz plik `panel-rolek.zip` do wydania w sekcji Releases. Kody licencyjne przekazuj odbiorcom osobno.
 
 ## Licencja
 

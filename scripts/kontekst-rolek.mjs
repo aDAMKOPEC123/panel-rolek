@@ -9,6 +9,7 @@ import { bankDoPromptu } from "./bank-hookow.mjs";
 import { policz, przepisDlaClaude } from "./algorytm.mjs";
 import { PROGI } from "./ocena-scenariusza.mjs";
 import { profilDoPromptu } from "./gabinet.mjs";
+import { kontekstAI, promptKontekstuAI } from "./kontekst-ai.mjs";
 
 export const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 export const data = (s) => { const [r, m, d] = s.split("-").map(Number); return new Date(r, m - 1, d, 12); };
@@ -107,7 +108,8 @@ export function kontekstGabinetu({ od = new Date(), dni = 10, bezPrzepisu = fals
   let przepis = ""; if (!bezPrzepisu) try { przepis = przepisDlaClaude(policz({ zapisz: false }), "mieszany", false); } catch {}
   const bank = bankDoPromptu(6);
   return `GABINET: ${g.nazwa && !/todo/i.test(g.nazwa) ? g.nazwa : "gabinet beauty"}${g.miasto && !/todo/i.test(g.miasto) ? `, ${g.miasto}` : ""}. Mówi do kamery ${OS.mian}. Usługi: ${usl}.
-${profilDoPromptu()}PORA ROKU: ${PORY[od.getMonth()]}.
+${profilDoPromptu()}${promptKontekstuAI(kontekstAI())}
+PORA ROKU: ${PORY[od.getMonth()]}.
 OKAZJE W NAJBLIŻSZYCH TYGODNIACH (rolka o okazji wychodzi 2-10 dni PRZED nią, nie po): ${ok.length ? ok.map((o) => `${o.data} ${o.okazja}`).join("; ") : "brak, graj porą roku i potrzebami klientek"}.
 ${grafik.length ? `GRAFIK ZABIEGÓW (to faktycznie dzieje się w gabinecie, więc to da się nagrać; buduj rolki pod te wizyty):\n${grafik.join("\n")}\n` : ""}${pyt.length ? `PYTANIA KLIENTEK (z komentarzy, DM i gabinetu; najlepsze źródło tematów: odpowiedź na prawdziwe pytanie = „to o mnie”):\n${pyt.map((p) => `- „${p.tekst}”${p.zrodlo ? ` (${p.zrodlo})` : ""}`).join("\n")}\n` : ""}OSTATNIE ROLKI (nie powtarzaj tematów): ${ostatnieRolki().join("; ") || "brak"}.
 FORMATY (pole "format", nazwa bez numeru): ${formaty().join("; ")}.

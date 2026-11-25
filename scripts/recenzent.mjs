@@ -9,6 +9,7 @@ import path from "node:path";
 import { ROOT, blad, ok, info, uwaga, znajdzProjekt, osobaZConfigu } from "./lib.mjs";
 import { claudeJson, ZASADY_TRESCI, OBIETNICE } from "./claude-json.mjs";
 import { bankDoPromptu } from "./bank-hookow.mjs";
+import { kontekstAI, promptKontekstuAI } from "./kontekst-ai.mjs";
 import { ocenScenariusz, podpisScenariusza, wynikRecenzji, wynikLaczny, KRYTERIA_HOOKA, slowa } from "./ocena-scenariusza.mjs";
 // imię z ustawień (config.json -> gabinet.osoba) w przypadkach: OS.mian, OS.dop, OS.cel, OS.bier; czytane przy każdym użyciu
 const OS = new Proxy({}, { get: (_, k) => osobaZConfigu()[k] });
@@ -44,6 +45,7 @@ const KRYT_OPIS = {
   autentycznosc: "3 = ulotka albo tekst jak z AI; 6 = poprawnie, ale bezosobowo; 9 = brzmi jak " + OS.mian + " mówiąca do koleżanki",
 };
 const prompt = `Jesteś surową recenzentką rolek Instagram/TikTok (beauty: kosmetologia i podologia, gabinet ${OS.dop}). NIE jesteś autorką tego scenariusza i nie masz jej bronić. Twoje zadanie: przewidzieć, czy ta rolka zatrzyma kciuk i utrzyma widza, i wskazać najważniejsze poprawki. Liczy się hook (pierwsze 1-2 s) i dynamika.
+${promptKontekstuAI(kontekstAI({ katalog: path.dirname(plik), projekt: plik === pom ? undefined : path.dirname(plik), dokument: P }))}
 
 PROFIL ROLKI
 - pomysł: ${pr.pomysl || "?"}

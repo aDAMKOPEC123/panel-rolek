@@ -13,6 +13,8 @@ import { spawnSync } from "node:child_process";
 import { ROOT, blad, ok, info, uwaga, znajdzProjekt, osobaZConfigu } from "./lib.mjs";
 import { claudeJson, ZASADY_TRESCI, OBIETNICE } from "./claude-json.mjs";
 import { ocenScenariusz, podpisScenariusza, wynikLaczny, PROGI } from "./ocena-scenariusza.mjs";
+import { WYTYCZNE_REZYSERII, porzadkujRezyserie } from "./rezyseria-montazu.mjs";
+import { kontekstAI, promptKontekstuAI } from "./kontekst-ai.mjs";
 // imię z ustawień (config.json -> gabinet.osoba) w przypadkach: OS.mian, OS.dop, OS.cel, OS.bier; czytane przy każdym użyciu
 const OS = new Proxy({}, { get: (_, k) => osobaZConfigu()[k] });
 
@@ -76,6 +78,7 @@ for (let runda = 1; runda <= RUNDY; runda++) {
   // ---------- autorka ----------
   const prompt = `Jesteś scenarzystką rolek IG/TikTok gabinetu beauty ${OS.dop}. Poprawiasz istniejący scenariusz. Wprowadź DOKŁADNIE te poprawki i nic więcej:
 ${poprawki.map((p, i) => `${i + 1}. ${p}`).join("\n")}
+${promptKontekstuAI(kontekstAI({ katalog: KAT, projekt: plik === pom ? undefined : KAT, dokument: P }))}
 
 ZASADY
 - Zmieniaj tylko miejsca potrzebne do tych poprawek. Resztę przepisz bez zmian (te same teksty, czasy, materiały).
@@ -84,6 +87,7 @@ ZASADY
 - Progi oceny: tekst hooka 3-7 słów z jednym *akcentem*, zdanie hooka maks. 10 słów, pierwszy wiersz (hook) do ${PROGI.hookCiecie} s, fragment maks. ${PROGI.zmianaObrazu} s albo z "bodziec", mowa ${PROGI.tempoMowy.join("-")} słowa na sekundę fragmentu (licz!), przy mowie na ekranie maks. ${PROGI.tekstPrzyMowie} słowa, "rola": "rehook" w 35-65% długości, "rola": "nagroda" w ostatnich 30%, jedno CTA na końcu.
 - ${ZASADY_TRESCI}
 - W "zmiany" wypisz krótko, co zmieniłaś (jedno zdanie na zmianę).
+${WYTYCZNE_REZYSERII}
 
 PROFIL (nie zmieniaj): ${JSON.stringify(P.profil)}
 
@@ -95,6 +99,7 @@ ${JSON.stringify(wersja(P), null, 1)}`;
   try { const o = await claudeJson(prompt, schemat, { timeout: 8 * 60 * 1000 }); nowa = o.dane; koszt += o.koszt; } catch (e) { uwaga(`Autorka nie odpowiedziała: ${e.message}`); break; }
 
   // ---------- zabezpieczenia ----------
+  nowa.scenariusz = porzadkujRezyserie(nowa.scenariusz, { ai: true, uzupelnij: true });
   (P.scenariusz || []).forEach((w) => {
     if (!w.zablokowany) return;
     const k = nowa.scenariusz.findIndex((x) => Number(x.od) === Number(w.od) || x.co_widac === w.co_widac);
@@ -102,6 +107,11 @@ ${JSON.stringify(wersja(P), null, 1)}`;
   });
   (P.hooki || []).forEach((h, i) => { if (h.zablokowany) nowa.hooki[i] = h; });
   nowa.scenariusz.sort((a, b) => Number(a.od) - Number(b.od));
+  // Runda oceny nie zastępuje zapisanych planów niezmienionych scen.
+  for (const w of nowa.scenariusz) {
+    const poprzednia = P.scenariusz.find((s) => s.od === w.od && s.do === w.do && s.mowisz === w.mowisz && s.co_widac === w.co_widac && s.na_ekranie === w.na_ekranie);
+    if (poprzednia?.rezyseria) w.rezyseria = poprzednia.rezyseria;
+  }
   if (!nowa.hooki.some((h) => h.wybrany)) nowa.hooki[0].wybrany = true;
   const tekst = JSON.stringify({ h: nowa.hooki, s: nowa.scenariusz.map((w) => [w.mowisz, w.na_ekranie]), m: nowa.materialy.map((m) => m.teleprompter) });
   if (OBIETNICE.test(tekst)) { uwaga("Nowa wersja zawiera obietnicę efektu, odrzucam rundę."); raport.push({ runda, odrzucona: "obietnica efektu" }); continue; }

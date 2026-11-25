@@ -65,6 +65,8 @@ panel/.cache/
 /wstawki/
 /zdjecia/
 /.agents/
+/.wydania/
+/.kopia-aktualizacji-*/
 
 # Skille: w repo tylko własny skill rolki-beauty (reszta: npx hyperframes skills update, wg skills-lock.json)
 .claude/*

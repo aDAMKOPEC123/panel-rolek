@@ -19,7 +19,8 @@
     {"id":"podtekst","type":"string","label":"Podtekst","default":""},
     {"id":"wariant","type":"enum","label":"Animacja","default":"slowa","options":[{"value":"slowa","label":"Słowo po słowie"},{"value":"maska","label":"Wjazd z maski"},{"value":"skala","label":"Skala i podkreślenie"},{"value":"uderzenie","label":"Uderzenie i kółko"}]},
     {"id":"tlo","type":"enum","label":"Tło","default":"pigulka","options":[{"value":"pigulka","label":"Pigułka"},{"value":"plansza","label":"Pełna plansza"},{"value":"brak","label":"Brak"}]},
-    {"id":"pozycja","type":"enum","label":"Pozycja","default":"gora","options":[{"value":"gora","label":"Góra"},{"value":"srodek","label":"Środek"}]}
+    {"id":"pozycja","type":"enum","label":"Pozycja","default":"gora","options":[{"value":"gora","label":"Góra"},{"value":"srodek","label":"Środek"}]},
+    {"id":"oprawa","type":"enum","label":"Oprawa montażu","default":"domyslna","options":[{"value":"domyslna","label":"Domyślna"},{"value":"editorial","label":"Editorial beauty"},{"value":"ekspertka","label":"Ekspertka w gabinecie"},{"value":"makro-asmr","label":"Makro ASMR"}]}
   ]'
 >
   <head>
@@ -141,6 +142,19 @@
           .hk-sub:empty {
             display: none;
           }
+          .hk-editorial .hk-box, .hk-ekspertka .hk-box { align-items: flex-start; text-align: left; }
+          .hk-editorial .hk-card { padding: 30px 38px; border-radius: 8px; background: #fff8f1; }
+          .hk-editorial .hk-rule { margin: 14px 0 0; width: 84px; }
+          .hk-editorial .hk-akcent { color: #7b463b; }
+          .hk-ekspertka .hk-card { padding: 26px 32px; border-radius: 8px; border-left: 7px solid #345f66; background: #f7fbfb; }
+          .hk-ekspertka .hk-title { font-family: var(--font-tekst, "Montserrat"), sans-serif; font-weight: 700; color: #183239; }
+          .hk-ekspertka .hk-akcent { color: #234f57; font-style: normal; }
+          .hk-ekspertka .hk-rule { display: none; }
+          .hk-makro-asmr .hk-card { padding: 14px 26px; border-radius: 8px; background: rgba(24, 20, 18, 0.92); }
+          .hk-makro-asmr .hk-title, .hk-makro-asmr .hk-akcent, .hk-makro-asmr .hk-sub { color: #fff4ec; }
+          .hk-makro-asmr .hk-title { font-family: var(--font-tekst, "Montserrat"), sans-serif; }
+          .hk-makro-asmr .hk-akcent { font-style: normal; }
+          .hk-makro-asmr .hk-rule { display: none; }
         </style>
         <div id="hook-tytul-clip" class="clip hk-clip" data-start="0" data-duration="2.5" data-track-index="0">
           <div id="hook-tytul-plansza" class="hk-plansza"></div>
@@ -164,10 +178,14 @@
             var wariant = ["slowa", "maska", "skala", "uderzenie"].indexOf(v.wariant) >= 0 ? v.wariant : "slowa";
             var tlo = ["pigulka", "plansza", "brak"].indexOf(v.tlo) >= 0 ? v.tlo : "pigulka";
             var title = $("title");
+            var oprawa = v.oprawa;
+            if (["editorial", "ekspertka", "makro-asmr"].indexOf(oprawa) >= 0) clip.classList.add("hk-" + oprawa);
 
             // Rozmiar fontu od długości: im krótszy hook, tym większy.
             var plain = tekst.replace(/[*|]/g, "");
             var size = plain.length <= 16 ? 112 : plain.length <= 28 ? 96 : plain.length <= 44 ? 80 : 66;
+            if (oprawa === "ekspertka") size = Math.round(size * 0.78);
+            if (oprawa === "makro-asmr") size = Math.min(58, Math.round(size * 0.63));
             if (wariant === "uderzenie") size = Math.round(size * 1.1);
             title.style.fontSize = size + "px";
 

@@ -12,6 +12,7 @@
 import json
 import os
 import sys
+from itertools import zip_longest
 
 import cv2
 import numpy as np
@@ -25,14 +26,14 @@ USTA = [1, 4, 98, 327, 61, 291, 0, 17, 13, 14, 129, 358]
 
 def klatki(p):
     cap = cv2.VideoCapture(p)
-    out = []
-    while True:
-        ok, f = cap.read()
-        if not ok:
-            break
-        out.append(cv2.resize(f, (W, H)) if f.shape[:2] != (H, W) else f)
-    cap.release()
-    return out
+    try:
+        while True:
+            ok, f = cap.read()
+            if not ok:
+                break
+            yield cv2.resize(f, (W, H)) if f.shape[:2] != (H, W) else f
+    finally:
+        cap.release()
 
 
 def main():
@@ -41,8 +42,6 @@ def main():
     fps, ciecia = u.get("fps", 4), u.get("ciecia", [])
     sz = u.get("safe", {"gora": 220, "dol": 420, "prawo": 140})
     os.makedirs(kat, exist_ok=True)
-    A, B = klatki(pelny), klatki(czysty)
-    n = min(len(A), len(B))
     det = None
     if os.path.exists(MODEL):
         try:
@@ -55,17 +54,26 @@ def main():
     strefy[14:sz["gora"], :] = True                       # góra (bez paska postępu 0-14 px)
     strefy[H - sz["dol"]:, :] = True                      # dół (opis, przyciski)
     strefy[:, W - sz["prawo"]:] = True                    # prawy pas (polubienia, komentarze)
-    zdarzenia, poprz_jas = [], None
-    for i in range(n):
+    zdarzenia, poprz_jas, n = [], None, 0
+    for i, (a, b) in enumerate(zip_longest(klatki(pelny), klatki(czysty))):
+        if a is None or b is None:
+            raise RuntimeError("Rendery próbne mają różną liczbę klatek.")
+        n += 1
         t = round(i / fps, 2)
-        a, b = A[i], B[i]
         roz = cv2.absdiff(a, b).max(axis=2)
         M = cv2.morphologyEx((roz > 28).astype(np.uint8), cv2.MORPH_OPEN, np.ones((3, 3), np.uint8)).astype(bool)
         udzial = float(M.mean())
         g = cv2.cvtColor(a, cv2.COLOR_BGR2GRAY)
         jas = float(g.mean())
         def zd(typ, opis, ile, maska=None, ramka=None):
-            zdarzenia.append({"t": t, "typ": typ, "opis": opis, "ile": round(ile, 3), "i": i, "maska": maska, "ramka": ramka})
+            img = cv2.resize(a, (270, 480))
+            if maska is not None:
+                pole = cv2.resize(maska.astype(np.uint8), (270, 480), interpolation=cv2.INTER_NEAREST).astype(bool)
+                img[pole] = (img[pole] * 0.4 + np.array([40, 40, 230]) * 0.6).astype(np.uint8)
+            if ramka:
+                x0, y0, x1, y1 = [p // 4 for p in ramka]
+                cv2.rectangle(img, (x0, y0), (x1, y1), (0, 220, 255), 2)
+            zdarzenia.append({"t": t, "typ": typ, "opis": opis, "ile": round(ile, 3), "img": img})
         if udzial < 0.6:
             if det is not None and M.any():
                 import mediapipe as mp
@@ -100,6 +108,10 @@ def main():
         if poprz_jas is not None and abs(jas - poprz_jas) > 40 and not any(t - 1 / fps - 0.05 <= c <= t + 0.05 for c in ciecia):
             zd("skok", f"Skok jasności o {round(abs(jas - poprz_jas))} bez cięcia (błysk albo migotanie)", abs(jas - poprz_jas))
         poprz_jas = jas
+    if not n:
+        raise RuntimeError("Nie odczytano żadnej klatki z renderów próbnych.")
+    if det is not None:
+        det.close()
     # scalanie w zakresy (ten sam typ, przerwa <= 0,5 s), miniatura pierwszej klatki z zaznaczeniem
     problemy = []
     for typ in sorted({z["typ"] for z in zdarzenia}):
@@ -112,20 +124,15 @@ def main():
                 grupy.append([z])
         for g in grupy:
             najg = max(g, key=lambda z: z["ile"])
-            img = A[najg["i"]].copy()
-            if najg["maska"] is not None:
-                img[najg["maska"]] = (img[najg["maska"]] * 0.4 + np.array([40, 40, 230]) * 0.6).astype(np.uint8)
-            if najg["ramka"]:
-                x0, y0, x1, y1 = najg["ramka"]
-                cv2.rectangle(img, (x0, y0), (x1, y1), (0, 220, 255), 6)
+            img = najg["img"]
             if typ == "strefa_ig":
                 for (x0, y0, x1, y1) in ((0, 14, W, sz["gora"]), (0, H - sz["dol"], W, H), (W - sz["prawo"], 0, W, H)):
-                    cv2.rectangle(img, (x0, y0), (x1 - 1, y1 - 1), (0, 220, 255), 3)
+                    cv2.rectangle(img, (x0 // 4, y0 // 4), ((x1 - 1) // 4, (y1 - 1) // 4), (0, 220, 255), 1)
             nazwa = f"{typ}_{len(problemy):02d}.jpg"
-            cv2.imwrite(os.path.join(kat, nazwa), cv2.resize(img, (270, 480)), [cv2.IMWRITE_JPEG_QUALITY, 82])
+            cv2.imwrite(os.path.join(kat, nazwa), img, [cv2.IMWRITE_JPEG_QUALITY, 82])
             problemy.append({"typ": typ, "od": g[0]["t"], "do": round(g[-1]["t"] + 1 / fps, 2), "opis": najg["opis"], "ile": najg["ile"], "obraz": nazwa})
     problemy.sort(key=lambda p: p["od"])
-    print(json.dumps({"klatek": n, "problemy": problemy}, ensure_ascii=True))  # ASCII: konsola Windows psuje polskie znaki
+    print(json.dumps({"klatek": n, "twarze": det is not None, "problemy": problemy}, ensure_ascii=True))
 
 
 if __name__ == "__main__":

@@ -77,38 +77,47 @@ function ekranRolkiProsty(el) {
   const final = finaly.find((f) => f.nazwa === `${P.nazwa}.mp4`) || finaly.find((f) => !/_4K\.mp4$/.test(f.nazwa)) || finaly[0];
   const final4k = finaly.find((f) => /_4K\.mp4$/.test(f.nazwa));
   const robocze = P.pliki.render.filter((f) => f.typ === "wideo").sort((a, b) => Date.parse(b.data) - Date.parse(a.data));
-  const film = final || robocze[0];
+  const nieaktualny = final && P.rolkaZmiana && Date.parse(P.rolkaZmiana) > Date.parse(final.data);
+  const film = (nieaktualny ? robocze[0] : final) || final || robocze[0];
+  const statusFinalu = P.pola.status || "";
+  const gotowyFinal = final && !nieaktualny && /^(gotowa do publikacji|opublikowana)/i.test(statusFinalu);
   const nagrania = P.pliki.raw.length;
   const ap = stanAutopilota(P.nazwa);
-  const krok = final ? 3 : film || ap ? 2 : nagrania ? 2 : 1;
+  const krok = gotowyFinal ? 3 : film || ap || nagrania ? 2 : 1;
   const r = rolka();
   const nat = r.montaz === "naturalny";
-  const blok = blokadaFinalu();
+  const preset = wybranyStylMontazu();
+  const maProxy = P.pliki.proxy.some((f) => f.typ === "wideo");
+  const blok = blokadaFinalu() || (ap ? blokadaFinaluAutopilota(P.audytAutopilota) : null);
   const potrzebaZgody = /^tak/i.test(P.pola["twarz klientki w kadrze"] || "") && !/^tak/i.test(P.pola["zgoda na wizerunek"] || "");
   const opis = [P.sekcje["Opis pod rolkę"], P.sekcje["Hashtagi"]].map((s) => (s || "").replace(/^TODO\s*$/im, "").trim()).filter(Boolean).join("\n\n");
-  const nieaktualny = final && P.rolkaZmiana && Date.parse(P.rolkaZmiana) > Date.parse(final.data);
   el.innerHTML = `
     <div class="pr-gora"><button class="btn jasny" id="prWroc">← Moje rolki</button><h1>${esc(/^todo$/i.test(P.pola["tytuł roboczy"] || "") ? P.nazwa : P.pola["tytuł roboczy"] || P.nazwa)}</h1></div>
     <div class="pr-postep">${KROKI_PROSTE.map(([i, t], n) => `<div class="${n + 1 < krok ? "zrobiony" : n + 1 === krok ? "teraz" : ""}"><span>${n + 1 < krok ? "✓" : n + 1}</span>${t}</div>`).join("")}</div>
     <div class="pr-uklad">
       <div class="pr-film">${film ? telefon(`<video class="odtwarzacz" src="${media(film.sciezka)}&v=${Date.parse(film.data)}" controls playsinline></video>`) : `<div class="pr-brak">${nagrania ? "🎬<br>Tu pojawi się rolka, gdy Claude ją zmontuje." : "📥<br>Najpierw nagrania."}</div>`}
-        ${film ? `<p class="podpowiedz" style="text-align:center">${final ? "✅ Wersja końcowa" : "👀 Wersja robocza (podgląd, niższa jakość)"} · ${new Date(film.data).toLocaleString("pl-PL", { dateStyle: "short", timeStyle: "short" })}</p>` : ""}</div>
+        ${film ? `<p class="podpowiedz" style="text-align:center">${film === final ? "Wersja końcowa" : "👀 Wersja robocza (podgląd, niższa jakość)"} · ${new Date(film.data).toLocaleString("pl-PL", { dateStyle: "short", timeStyle: "short" })}</p>` : ""}</div>
       <div class="pr-panel">
         ${!nagrania ? `<div class="karta"><h3>📥 Wrzuć nagrania</h3>
           <label class="ap-zrzut" id="prZrzut"><input type="file" id="prPliki" multiple accept="video/*,image/*" hidden><b>Przeciągnij tu nagrania</b><br><small>albo kliknij, żeby wybrać</small></label>
           <div class="rzad" style="margin-top:10px"><button class="btn jasny" id="prTel">📱 Albo prosto z telefonu</button></div></div>` : ""}
         ${nagrania && !ap && !film ? `<div class="karta pr-wyrozniona"><h3>🪄 Zmontujmy to</h3><p class="podpowiedz">${nagrania} ${nagrania === 1 ? "nagranie" : nagrania < 5 ? "nagrania" : "nagrań"} w rolce. Claude je obejrzy, zada kilka pytań i zmontuje rolkę.</p><button class="btn duzy" id="prMontuj">🪄 Zmontuj z Claude</button></div>` : ""}
-        ${ap ? `<div class="karta"><h3>💬 Rozmowa z Claude</h3><p class="podpowiedz">${ap.gotowe ? "Claude skończył montaż. Możesz wrócić do rozmowy." : "Claude czeka na Twoją odpowiedź albo jeszcze pracuje."}</p><button class="btn ${ap.gotowe ? "jasny" : ""}" id="prRozmowa">💬 ${ap.gotowe ? "Otwórz rozmowę" : "Wróć do rozmowy"}</button></div>` : ""}
+        ${ap ? `<div class="karta"><h3>💬 Rozmowa z Claude</h3><p class="podpowiedz">${ap.idZadania ? "Trwa montaż lub kontrola." : gotowyFinal ? "Wersja końcowa gotowa." : P.audytAutopilota?.aktualny ? "Sprawdzona wersja robocza czeka na obejrzenie." : "Wróć do rozmowy, aby kontynuować."}</p><button class="btn ${ap.gotowe ? "jasny" : ""}" id="prRozmowa">💬 ${ap.gotowe ? "Otwórz rozmowę" : "Wróć do rozmowy"}</button></div>` : ""}
         ${potrzebaZgody ? `<div class="karta pr-uwaga"><h3>🙋 Zgoda klientki</h3><p>W kadrze jest twarz klientki. Czy zgodziła się na pokazanie jej w rolce?</p><div class="rzad"><button class="btn" id="prZgodaTak">Tak, mam zgodę</button><button class="btn jasny" id="prZgodaNie">Nie</button></div></div>` : ""}
         ${film ? `<div class="karta"><h3>✏️ Co poprawić?</h3>
           <div class="chipy pr-szybkie">${["Krótsza", "Mniej tekstu na ekranie", "Mocniejszy początek", "Spokojniejsza", "Inna muzyka"].map((t) => `<button class="chip-btn" data-popraw="${esc(t)}">${esc(t)}</button>`).join("")}</div>
           <textarea id="prPoprawka" rows="2" placeholder="Napisz po swojemu, np. „wytnij moment, gdzie się mylę”"></textarea>
           <div class="rzad" style="margin-top:8px"><button class="btn" id="prPopraw">Popraw</button></div>
-          <div class="pr-charakter"><span>Wygląd:</span><button data-montaz="reklamowy" class="${nat ? "" : "wybrany"}">📣 Reklamowy</button><button data-montaz="naturalny" class="${nat ? "wybrany" : ""}">🤳 Naturalny, jak vlog</button></div></div>` : ""}
-        ${film && (!final || nieaktualny) ? `<div class="karta pr-wyrozniona"><h3>✅ Podoba mi się</h3><p class="podpowiedz">${nieaktualny ? "Po ostatnich poprawkach trzeba zrobić wersję końcową jeszcze raz." : "Zrobię wersję końcową w pełnej jakości, okładkę i sprawdzę plik pod Instagram (kilka minut)."}</p>
+          <div class="pr-charakter"><span>Wygląd:</span><button data-montaz="reklamowy" class="${nat || preset ? "" : "wybrany"}">📣 Reklamowy</button><button data-montaz="naturalny" class="${nat ? "wybrany" : ""}">🤳 Naturalny, jak vlog</button></div></div>` : ""}
+        ${nagrania || film || maProxy || r.ujecia.length ? '<div class="panel-presetow"></div>' : ""}
+        ${maProxy ? kartaSzukaniaUjec() : ""}
+        ${kartaRezyseriiProjektu()}
+        ${kartaAudytuAutopilota(P)}
+        ${film && !gotowyFinal ? `<div class="karta pr-wyrozniona"><h3>✅ Podoba mi się</h3><p class="podpowiedz">${nieaktualny ? "Po ostatnich poprawkach trzeba zrobić wersję końcową jeszcze raz." : "Zrobię wersję końcową w pełnej jakości, okładkę i sprawdzę plik pod Instagram (kilka minut)."}</p>
           ${blok ? `<div class="ramka ostrzezenie">${esc(blok)}</div>` : `<button class="btn duzy" id="prFinal" data-zadanie>✅ Zrób wersję końcową</button>`}</div>` : ""}
         ${final ? wynikiRolkiHtml(P.wyniki) : ""}
-        ${final ? `<div class="karta pr-wyrozniona"><h3>⬇️ Gotowe na Instagram</h3>
+        ${final ? `<div class="karta pr-wyrozniona"><h3>${gotowyFinal ? "⬇️ Gotowe na Instagram" : "Wersja końcowa do sprawdzenia"}</h3>
+          ${gotowyFinal || !statusFinalu ? "" : `<p class="podpowiedz">${esc(statusFinalu)}</p>`}
           <div class="rzad"><a class="btn duzy" href="${media(final4k?.sciezka || final.sciezka)}" download="${esc(P.nazwa)}.mp4">⬇️ Pobierz film</a>${P.pliki.final.some((f) => f.nazwa === "okladka.jpg") ? `<a class="btn jasny" href="${media(`${P.sciezka}/final/okladka.jpg`)}" download="okladka.jpg">🖼️ Okładka</a>` : ""}</div>
           ${opis ? `<label class="pole" style="margin-top:12px"><span>Opis pod rolkę</span><textarea id="prOpis" rows="5" readonly>${esc(opis)}</textarea></label><button class="btn jasny" id="prKopiuj">📋 Kopiuj opis</button>`
             : `<p class="podpowiedz" style="margin-top:10px">Nie ma jeszcze opisu pod rolkę.</p><button class="btn jasny" id="prOpisZrob">✦ Napisz opis i hashtagi</button>`}</div>` : ""}
@@ -117,6 +126,10 @@ function ekranRolkiProsty(el) {
     </div>`;
   $("#prWroc").onclick = () => { S.projekt = null; idz(0); };
   $("#prZaawansowany").onclick = () => ustawTryb(false);
+  podepnijSzukanieUjec(el);
+  podepnijRezyserieProjektu(el);
+  podepnijAudytAutopilota(el);
+  kartaPresetowMontazu($(".panel-presetow", el));
   const zrzut = $("#prZrzut");
   if (zrzut) {
     const wgraj = async (pliki) => {
@@ -143,17 +156,12 @@ function ekranRolkiProsty(el) {
   on("#prPopraw", () => { const t = $("#prPoprawka").value.trim(); if (!t) return toast("Napisz, co poprawić, albo kliknij gotową podpowiedź"); poprawka(t); });
   el.querySelectorAll("[data-popraw]").forEach((b) => (b.onclick = () => poprawka(b.dataset.popraw)));
   el.querySelectorAll(".pr-charakter [data-montaz]").forEach((b) => (b.onclick = () => {
-    if ((b.dataset.montaz === "naturalny") === nat) return;
+    if (!preset && (b.dataset.montaz === "naturalny") === nat) return;
     if (b.dataset.montaz === "naturalny") r.montaz = "naturalny"; else delete r.montaz;
     zapiszRolke();
     poprawka(b.dataset.montaz === "naturalny" ? "Przełączyłam rolkę na wygląd naturalny, jak vlog. Złóż ją i zrób wersję roboczą, nic więcej nie zmieniaj." : "Przełączyłam rolkę na wygląd reklamowy. Złóż ją i zrób wersję roboczą, nic więcej nie zmieniaj.", true);
   }));
-  on("#prFinal", () => {
-    uruchom("render", [P.nazwa, "--final"], { opis: "Wersja końcowa", po: ({ kod }) => {
-      if (kod) return odswiezProjekt();
-      uruchom("okladka", [P.nazwa], { opis: "Okładka", po: () => uruchom("sprawdz", [P.nazwa], { opis: "Sprawdzam plik pod Instagram", po: () => { toast("Gotowe ✓ Możesz pobrać film", 3000); odswiezProjekt(); } }) });
-    } });
-  });
+  on("#prFinal", () => (ap ? akcjaAutopilota("Robimy final") : finalizujZPanelem(P)).catch(blad));
   on("#prKopiuj", async () => { try { await navigator.clipboard.writeText($("#prOpis").value); toast("Skopiowano opis"); } catch { blad(new Error("Nie udało się skopiować")); } });
   on("#prOpisZrob", () => poprawka("Napisz opis pod rolkę (mówiony, krótki, bez obietnic) i 5-10 hashtagów (lokalne z config.json + branżowe). Wpisz je do brief.md w sekcje „Opis pod rolkę” i „Hashtagi”. Nie renderuj.", true));
 }
@@ -161,13 +169,16 @@ function ekranRolkiProsty(el) {
 // Poprawka zdaniem: ta sama rozmowa co autopilot (jeśli był), inaczej osobna rozmowa „Poprawki”.
 function poprawka(tekst, bezRenderu) {
   const P = S.projekt, n = P.nazwa;
+  const ap = stanAutopilota(n);
+  if (ap?.sesja) {
+    uruchomAutopilota(true);
+    return wyslijDoAsystenta(`${tekst}\nJeśli wprowadzisz zmiany w montażu, zakończ MONTAŻ DO KONTROLI. Panel przygotuje nowy podgląd. Jeśli zmieniasz tylko opis, nie uruchamiaj kontroli ani renderu.`, tekst);
+  }
   const zadanie = bezRenderu
     ? tekst + "\nNa końcu krótko napisz, co zrobiłaś, a w ostatniej linii: GOTOWE"
     : `${OS().mian} ogląda rolkę i prosi o poprawkę: „${tekst}”.
 Zrób ją w ${P.sciezka}/kompozycja/rolka.json (ujęcia, sceny, napisy, efekty; zasady z CLAUDE.md, bez obietnic medycznych), potem npm run zloz -- ${n} i npm run render -- ${n} (wersja robocza, timeout 600000). Jeśli prośba jest niejasna, zadaj jedno pytanie z linią OPCJE: a | b | c.
 Na końcu jednym, dwoma zdaniami napisz po ludzku, co zmieniłaś, a w ostatniej linii: GOTOWE`;
-  const ap = stanAutopilota(n);
-  if (ap?.sesja) { uruchomAutopilota(true); return wyslijDoAsystenta(zadanie, bezRenderu ? null : tekst); }
   const tytul = "Poprawki ✏️";
   const otwarta = A.klucz === n + "|" + tytul && A.sesja;
   otworzAsystenta({ tytul, powitanie: "Już się za to biorę. Poprawię rolkę i zrobię nową wersję do obejrzenia (zwykle 1-3 minuty).",

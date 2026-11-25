@@ -106,6 +106,26 @@ export function hf(args, opts = {}) {
   return uruchom("npx", ["--yes", ver, ...args.map(q)], opts);
 }
 
+// Robocze kompozycje recenzji mają własne pliki, ale korzystają z materiałów oryginalnego projektu.
+export function katalogProbyMontazu(projekt, args) {
+  const prefiks = "--audyt=";
+  const proba = args.find((a) => a.startsWith(prefiks));
+  if (proba == null) return null;
+  const id = proba.slice(prefiks.length);
+  if (!/^[a-f0-9]{8,32}$/.test(id)) blad("Nieprawidłowy identyfikator próby montażu.");
+  return path.join(projekt, "kompozycja", ".proby-montazu", id);
+}
+
+export function znacznikiKontroli(znaczniki, problemy) {
+  const pl = (t) => String(Math.round(t * 10) / 10).replace(".", ",");
+  const zachowane = (znaczniki || []).filter((z) => z.autor !== "kontrola" || z.stan === "zrobione");
+  const id = Date.now().toString(36);
+  return [...zachowane, ...problemy.map((p, i) => ({
+    id: `k${id}${i}`, t: Math.round(p.od * 10) / 10, tekst: `${p.opis} (${pl(p.od)}–${pl(p.do)} s)`,
+    propozycja: p.propozycja, waga: p.waga, autor: "kontrola", stan: "do zrobienia",
+  }))];
+}
+
 export function wymagaj(prog, instalacja) {
   const r = uruchom(prog, prog === "auto-editor" ? ["--version"] : ["-version"], { cicho: true });
   if (r.code !== 0) blad(`Brak programu "${prog}".`, instalacja);
@@ -235,6 +255,14 @@ export function zapiszBezpiecznie(out, zapisz) {
   fs.rmSync(out, { force: true });
   fs.renameSync(czesc, out);
   return out;
+}
+
+export function zapiszJSONAtomowo(plik, dane) {
+  const tymczasowy = `${plik}.${process.pid}.czesc`;
+  try {
+    fs.writeFileSync(tymczasowy, JSON.stringify(dane, null, 2) + "\n", "utf8");
+    fs.renameSync(tymczasowy, plik);
+  } finally { fs.rmSync(tymczasowy, { force: true }); }
 }
 
 export function podlinkuj(src, dst) {

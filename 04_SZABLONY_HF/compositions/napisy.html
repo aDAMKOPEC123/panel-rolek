@@ -25,7 +25,8 @@
     {"id":"wyroznij","type":"string","label":"Słowa kluczowe (po przecinku)","default":"laminacja,brwi"},
     {"id":"slow_w_grupie","type":"number","label":"Maks. słów w grupie","default":4,"min":2,"max":6,"step":1},
     {"id":"emoji","type":"boolean","label":"Emoji nad słowami (brwi, skóra, cena...)","default":false},
-    {"id":"nacisk","type":"boolean","label":"Napisy reagują na głos (ustawia zloz)","default":false}
+    {"id":"nacisk","type":"boolean","label":"Napisy reagują na głos (ustawia zloz)","default":false},
+    {"id":"frazy","type":"boolean","label":"Całe frazy naraz","default":false}
   ]'
 >
   <head>
@@ -126,6 +127,8 @@
             font-weight: 400;
             text-shadow: 0 3px 18px rgba(0, 0, 0, 0.55), 0 1px 3px rgba(0, 0, 0, 0.35);
           }
+          .s-waga.np-frazy .np-box { background: rgba(16, 28, 32, 0.92); border-radius: 0.2em; }
+          .s-waga.np-frazy .np-word { color: #fff; font-weight: 700; }
           /* este: granatowy szeryf na półprzezroczystym białym boksie, słowo kluczowe złotą kursywą */
           .s-este .np-box {
             padding: 0.26em 0.75em 0.34em;
@@ -139,6 +142,7 @@
           .s-este .np-word { color: var(--tekst, #082032); }
           .s-este .np-word.np-key { color: var(--akcent, #c8a15f); font-style: italic; }
           /* vlog: jak napisy z aplikacji twórczyń, bez tła i bez kolorów marki */
+          .s-vlog.np-frazy .np-box { padding: 0.18em 0.48em 0.22em; background: rgba(24, 20, 18, 0.88); border-radius: 0.18em; }
           .s-vlog .np-word {
             color: #ffffff;
             font-weight: 700;
@@ -162,6 +166,8 @@
             var MAX_WORDS = Math.max(2, Math.min(6, Number(v.slow_w_grupie) || 4));
             var EMOJI = v.emoji === true || v.emoji === "true";
             var NACISK = v.nacisk === true || v.nacisk === "true";
+            var FRAZY = v.frazy === true || v.frazy === "true";
+            if (FRAZY) clip.classList.add("np-frazy");
             // Początek słowa -> emoji. Max jedno emoji na grupę napisów.
             var SLOWNIK = [
               ["brw", "🤎"], ["rzęs", "👁️"], ["rzes", "👁️"], ["skór", "✨"], ["skor", "✨"], ["cer", "✨"], ["twarz", "🌸"],
@@ -302,7 +308,7 @@
               if (styl === "vlog") tl.fromTo(el, { opacity: 0 }, { opacity: 1, duration: 0.06, ease: "none" }, gStart);
               else if (styl === "este") tl.fromTo(el, { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.24, ease: RUCH.we }, gStart);
               else tl.fromTo(el, { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.14, ease: RUCH.we }, gStart);
-              spans.forEach(function (sp) {
+              if (!FRAZY) spans.forEach(function (sp) {
                 var on = Math.max(gStart, sp.w.start - 0.04);
                 if (sp.w.n === 2) {
                   // uderzenie na słowie z naciskiem: szybkie powiększenie, krótkie drgnięcie, powrót

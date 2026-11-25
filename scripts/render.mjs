@@ -8,15 +8,24 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   ROOT, hf, uruchom, blad, ok, info, uwaga, szary, wczytajConfig, znajdzProjekt, wczytajRolke, czytajBrief,
-  zgodaNaWizerunek, nastepnaWersja, ffprobe, ustawWBrief,
+  zgodaNaWizerunek, nastepnaWersja, ffprobe, ustawWBrief, katalogProbyMontazu,
 } from "./lib.mjs";
+import { stanAudytuAutopilota } from "./audyt-autopilota.mjs";
 
 const cfg = wczytajConfig();
 const args = process.argv.slice(2);
 const proj = znajdzProjekt(args.find((a) => !a.startsWith("--")));
 const nazwa = path.basename(proj);
-const komp = path.join(proj, "kompozycja");
+const proba = katalogProbyMontazu(proj, args);
+const komp = proba || path.join(proj, "kompozycja");
 const final = args.includes("--final");
+if (proba && final) blad("W próbie audytu można renderować tylko wersję roboczą.");
+if (final && args.includes("--sprawdzony-autopilot")) {
+  const audyt = stanAudytuAutopilota(proj);
+  if (!audyt?.aktualny) blad("Montaż zmienił się po audycie. Sprawdź aktualną wersję przed finalem.");
+  if (!audyt.obraz.zakres.twarze || !audyt.obraz.zakres.hyperframes) blad("Kontrola techniczna autopilota jest niepełna.");
+  if (audyt.obraz.problemy.some((p) => p.waga === "krytyczne")) blad("Autopilot wykrył błędy krytyczne. Popraw je przed finalem.");
+}
 const wariant = (() => { const i = args.indexOf("--wariant"); return i >= 0 ? String(args[i + 1] || "").replace(/[^\w-]/g, "") : null; })();
 const jakosc = final ? cfg.hyperframes?.jakosc_final || "high" : args.includes("--standard") ? cfg.hyperframes?.jakosc_akceptacja || "standard" : cfg.hyperframes?.jakosc_robocza || "draft";
 
@@ -25,10 +34,10 @@ const rj = path.join(komp, "rolka.json");
 const idx = path.join(komp, "index.html");
 if (!fs.existsSync(idx) || (fs.existsSync(rj) && fs.statSync(rj).mtimeMs > fs.statSync(idx).mtimeMs)) {
   info("rolka.json jest nowszy niż kompozycja, składam ...");
-  const r = uruchom("node", [path.join(ROOT, "scripts", "zloz.mjs"), proj], { pokaz: true });
+  const r = uruchom("node", [path.join(ROOT, "scripts", "zloz.mjs"), proj, ...(proba ? [`--audyt=${path.basename(proba)}`] : [])], { pokaz: true });
   if (r.code !== 0) process.exit(1);
 }
-const rolka = wczytajRolke(proj);
+const rolka = proba ? JSON.parse(fs.readFileSync(rj, "utf8")) : wczytajRolke(proj);
 
 // 2. Reguły dla wersji finalnej
 if (final) {
@@ -68,7 +77,9 @@ if (final && !args.includes("--bez-check")) {
 
 // 4. Render
 let out;
-if (final) {
+if (proba) {
+  out = path.join(proba, "podglad.mp4");
+} else if (final) {
   fs.mkdirSync(path.join(proj, "final"), { recursive: true });
   out = wariant ? path.join(proj, "final", "warianty", `${nazwa}_hook_${wariant}.mp4`) : path.join(proj, "final", `${nazwa}.mp4`);
   fs.mkdirSync(path.dirname(out), { recursive: true });
@@ -91,6 +102,6 @@ if (final && wariant) {
 } else if (final) {
   ustawWBrief(proj, "status", "final wyrenderowany, do sprawdzenia");
   info(szary("Dalej: npm run okladka -- " + nazwa + "  i  npm run sprawdz -- " + nazwa));
-} else {
+} else if (!proba) {
   ustawWBrief(proj, "status", `wersja robocza v${path.basename(out).match(/_v(\d+)/)[1]} (${jakosc})`);
 }

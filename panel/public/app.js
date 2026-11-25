@@ -108,8 +108,9 @@ function sledz(z, opis, po, logEl) {
           setTimeout(() => { if (!S.zadanie) box.classList.add("ukryte"); }, 6000);
         }
         odswiezPrzyciski();
-        resolve({ kod: d.kod, tekst: txt, wynik: d.wynik, sesja: d.sesja });
-        if (po) po({ kod: d.kod, tekst: txt, wynik: d.wynik, sesja: d.sesja });
+        const wynik = { kod: d.kod, tekst: txt, wynik: d.wynik, sesja: d.sesja, audyt: d.audyt };
+        resolve(wynik);
+        if (po) po(wynik);
       }
     };
     es.onerror = () => {};
@@ -417,12 +418,14 @@ async function ekranNagrania(el) {
     ${kartaAutopilota()}
     ${kartaVloga(raw)}
     ${kartaMaterialowProjektu()}
+    ${kartaRezyseriiProjektu()}
     ${kartaRozpoznania(raw)}
     ${kartaKwestii()}
     ${inbox.length ? `<div class="karta"><div class="naglowek"><div><h3>W 00_INBOX (${inbox.length})</h3><p>Zaznacz, co ma trafić do tej rolki.</p></div><button class="btn" id="przenies" data-zadanie>Przenieś zaznaczone do rolki</button></div><div class="siatka" id="inbox">${inbox.map((f) => kafelKlipu(f, S.inboxWybrane.has(f.nazwa))).join("")}</div></div>` : ""}
     <div class="karta"><div class="naglowek"><div><h3>Nagrania tej rolki (raw/)</h3><p>${raw.length ? "Przygotowanie robi pion 1080x1920, 30 fps i równą głośność." : "Pusto. Wrzuć pliki do 00_INBOX albo do folderu raw/."}</p></div>
       <div class="rzad"><div class="tn-wiersz" id="ciszaTN"><span>✂️ Wytnij ciszę i „yyy”</span>${takNie("wytnij_cisze", efekt("wytnij_cisze"))}</div><button class="btn jasny" id="folderRaw">Otwórz folder</button><button class="btn" id="przygotuj" data-zadanie ${raw.length ? "" : 'data-zablokowany="1"'}>Przygotuj nagrania</button><button class="btn jasny" id="kolorUjec" data-zadanie title="Balans bieli i jasność wszystkich klipów z ujęć dopasowane do najbardziej typowego (delikatnie, bez nasycania i wygładzania skóry)">🎨 Wyrównaj kolor ujęć</button></div></div>
       <div class="siatka">${raw.map((f) => kafelKlipu(f, false, false)).join("")}</div></div>
+    ${proxy.length ? kartaSzukaniaUjec() : ""}
     <div class="karta"><div class="naglowek"><div><h3>Ujęcia (kolejność w rolce)</h3><p>Przeciągnij, żeby zmienić kolejność. Kliknij miniaturę, żeby przyciąć.</p></div>
       <div class="rzad"><button class="btn" id="przejsciaAI" data-zadanie title="Analizuje końcówkę każdego ujęcia: ruch kamery, machnięcie ręką, postać w ruchu, najazd, zasłonięcie obiektywu, i dobiera przejście. Ręcznie wybrane przejścia zostają.">✦ AI: dobierz przejścia</button><button class="btn" id="akcjaAI" data-zadanie title="Cięcia na akcji: ruch ręki przelewa się przez cięcie do następnego ujęcia. Tempo: powtarzalne ruchy (czesanie, piłowanie) przyspieszone 2,5-3x z płynnym wejściem, efekt w normalnym tempie. Tylko ujęcia bez mowy i dźwięku. Najpierw pokazuje propozycje.">✦ AI: cięcia na akcji i tempo</button>${(S.projekt.rolka?.ujecia || []).some((u) => u.akcja || u.akcja_ciecie) ? `<button class="btn jasny" id="akcjaCofnij" data-zadanie title="Przywraca ujęcia sprzed cięć na akcji i tempa">↶ Cofnij akcję</button>` : ""}<button class="btn jasny" id="dodajPlansze">+ Plansza kolorowa</button></div></div>
       ${proxy.length ? `<p class="podpowiedz" style="margin-bottom:8px">Dodaj gotowe klipy (proxy/):</p><div class="siatka" id="proxy" style="margin-bottom:18px">${proxy.map((f) => kafelKlipu(f, false, false).replace('class="klip', 'title="Kliknij, żeby dodać jako ujęcie" class="klip')).join("")}</div>` : `<div class="ramka info">Najpierw kliknij „Przygotuj nagrania”. Gotowe klipy pojawią się tutaj.</div>`}
@@ -431,10 +434,12 @@ async function ekranNagrania(el) {
     </div>`;
   stopka(el);
   podepnijMaterialy(el);
+  podepnijRezyserieProjektu(el);
   const apW = $("#apWroc", el); if (apW) apW.onclick = () => uruchomAutopilota(true);
   podepnijRozpoznanie(el);
   podepnijKwestie(el);
   podepnijVlog(el);
+  podepnijSzukanieUjec(el);
   if (inbox.length) {
     $("#inbox").querySelectorAll(".klip").forEach((k) => (k.onclick = () => { const n = k.dataset.sciezka.split("/").pop(); S.inboxWybrane.has(n) ? S.inboxWybrane.delete(n) : S.inboxWybrane.add(n); k.classList.toggle("wybrany"); $(".zaznacz", k).textContent = S.inboxWybrane.has(n) ? "✓" : ""; }));
     $("#przenies").onclick = () => { if (!S.inboxWybrane.size) return toast("Zaznacz pliki"); uruchom("inbox", ["--do", P.nazwa, ...S.inboxWybrane], { opis: "Przenoszenie z inboxu", po: () => { S.inboxWybrane.clear(); odswiezProjekt(); } }); };
@@ -533,6 +538,7 @@ function podgladUjecia(i) {
     box.innerHTML = `<div class="karta" style="margin-top:14px"><h3>Plansza ${i + 1}</h3><div class="rzad"><label class="pole"><span>Kolor</span><input type="color" id="kolor" value="${esc(u.kolor || "#E9D9CF")}"></label><label class="pole"><span>Czas (s)</span><input type="number" id="czas" step="0.1" min="0.5" value="${u.czas || 2}"></label></div></div>`;
     $("#kolor").oninput = (e) => { u.kolor = e.target.value; zapiszRolke(); listaUjec(); };
     $("#czas").oninput = (e) => { u.czas = Number(e.target.value); zapiszRolke(); listaUjec(); };
+    pokazPrzebitkiUjecia(box, u, i);
     return;
   }
   const m = metaPliku(u.src);
@@ -555,6 +561,7 @@ function podgladUjecia(i) {
   $("#odtworz").onclick = () => { vid.currentTime = u.od || 0; vid.play(); const stop = () => { if (vid.currentTime >= (u.do ?? D)) { vid.pause(); vid.removeEventListener("timeupdate", stop); } }; vid.addEventListener("timeupdate", stop); };
   rysuj();
   narzedziaUjecia(i, u, vid, box);
+  pokazPrzebitkiUjecia(box, u, i);
   box.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 // Kotwice mapy twarzy do wyboru w panelu (pełna lista: scripts/twarz-dane.mjs, KOTWICE_TWARZY).
@@ -714,8 +721,8 @@ const PRZEPISY = {
   10: { zajawka: true, bodziec: true, punch_in: true, dzwieki: true, zapetlenie: false, pasek_postepu: false, emoji: true },
   11: { zajawka: true, bodziec: false, punch_in: false, dzwieki: true, zapetlenie: true, pasek_postepu: false, emoji: false, wycisz_muzyke: true, wytnij_cisze: false },
 };
-const ikonaEfektu = (k) => EFEKTY.find((x) => x[0] === k)?.[2] || "";
-const nazwaEfektu = (k) => EFEKTY.find((x) => x[0] === k)?.[3] || k;
+const ikonaEfektu = (k) => efektyMontazu().find((x) => x[0] === k)?.[2] || "";
+const nazwaEfektu = (k) => efektyMontazu().find((x) => x[0] === k)?.[3] || k;
 function wlaczonePrzepisu(nr) { return Object.entries(PRZEPISY[nr] || {}).filter(([, v]) => v).map(([k]) => k); }
 // Style ruchu marki (zloz: STYLE_RUCHU, zmienne --ruch-*). Krzywa CSS tylko do kropki-podglądu w panelu.
 const STYLE_RUCHU = [
@@ -748,7 +755,7 @@ function ekranStyl(el) {
         <label class="rzad"><input type="checkbox" id="sz" ${r.debug_safe_zone ? "checked" : ""}> Pokaż strefy UI Instagrama w podglądzie (wyłącz przed finalem)</label></div>
     </div>
     <div class="karta"><div class="naglowek"><div><h3>Efekty montażu</h3><p>Każdy efekt włączasz albo wyłączasz jednym kliknięciem. Zmiana działa przy następnym renderze.</p></div></div>
-      <div class="efekty" id="efekty">${EFEKTY.map(([k, , ik, n, o]) => `<div class="efekt ${efekt(k) ? "wlaczony" : ""}" data-ef="${k}"><span class="efekt-ikona">${ik}</span><div class="efekt-opis"><b>${n}</b><p>${o}</p>${k === "emoji" && r.napisy?.wlacz === false ? '<p class="uwaga-mala">Napisy są wyłączone, więc emoji się nie pokażą.</p>' : ""}</div>${takNie(k, efekt(k))}</div>`).join("")}</div></div>`;
+      <div class="efekty" id="efekty">${efektyMontazu().map(([k, , ik, n, o]) => `<div class="efekt ${efekt(k) ? "wlaczony" : ""}" data-ef="${k}"><span class="efekt-ikona">${ik}</span><div class="efekt-opis"><b>${n}</b><p>${o}</p>${k === "emoji" && r.napisy?.wlacz === false ? '<p class="uwaga-mala">Napisy są wyłączone, więc emoji się nie pokażą.</p>' : ""}</div>${takNie(k, efekt(k))}</div>`).join("")}</div></div>`;
   stopka(el);
   kartaStyluRolki($("#stylRolki"));
   kartaCharakteru($("#charakterMontazu"));
@@ -1112,6 +1119,7 @@ function ekranRender(el) {
       </div>
       <div class="karta" style="display:flex;justify-content:center">${wersje.length ? telefon(`<video class="odtwarzacz" id="player" src="${media(wersje[0].sciezka)}&v=${Date.parse(wersje[0].data)}" controls playsinline></video>`) : `<div class="odtwarzacz" style="display:grid;place-items:center;color:#fff">brak renderu</div>`}</div>
     </div>
+    ${kartaAudytuAutopilota(P)}
     ${kartaWariantow(blok)}
     <div class="karta"><h3>Okładka</h3>
       <div class="rzad" style="align-items:flex-start;gap:24px">
@@ -1136,6 +1144,7 @@ function ekranRender(el) {
   $("#draft").onclick = () => uruchom("render", [P.nazwa], { opis: "Wersja robocza", po: poRenderze });
   podepnijKontroleHooka(el);
   podepnijKontroleObrazu(el);
+  podepnijAudytAutopilota(el);
   $("#standard").onclick = () => uruchom("render", [P.nazwa, "--standard"], { opis: "Wersja do akceptacji", po: poRenderze });
   $("#final").onclick = () => { if (blok) return; uruchom("render", [P.nazwa, "--final"], { opis: "Final (jakość high)", po: poRenderze }); };
   const f4 = $("#final4k"); if (f4) f4.onclick = () => uruchom("ulepsz", [P.nazwa, "--final"], { opis: "Final w 4K (upscaling AI)", po: poRenderze });
@@ -1339,7 +1348,7 @@ Jedno pytanie naraz, jeśli czegoś brakuje (ostatnia linia OPCJE: …). Na koń
 // Poproś Claude
 // =====================================================================
 const CHIPY = [
-  ["Zaproponuj montaż z tych nagrań", "Obejrzyj nagrania w raw/ i proxy/ tej rolki (klatki co 1 s), wybierz najlepsze ujęcia i ułóż je w kompozycja/rolka.json (ujęcia z przycięciem od/do, przejścia, hook na start, CTA na końcu). Pokaż mi listę ujęć z timecode."],
+  ["Zaproponuj montaż z tych nagrań", "Obejrzyj nagrania w raw/ i proxy/ tej rolki. Zaproponuj listę najlepszych ujęć z czasem, hook, przejścia, reżyserię scen i CTA. Wypisz, których narzędzi użyć, a które pominąć, i uzasadnij wybór."],
   ["Napisz 3 hooki", "Napisz 3 warianty hooka tekstowego do tej rolki i wpisz je do brief.md w sekcji „Hook (3 warianty)”. Pierwszy wstaw do sceny hook-tytul w rolka.json."],
   ["Napisz opis i hashtagi", "Napisz opis pod rolkę (mówiony, krótki, bez obietnic) i 5-10 hashtagów (lokalne z config.json + branżowe). Wpisz je do brief.md."],
   ["Popraw napisy (nazwy zabiegów)", "Przeczytaj napisy/transcript.json i popraw tylko błędy rozpoznania (nazwy zabiegów, preparatów, liczby, źle usłyszane słowa). Nie zmieniaj stylu mówienia ani czasów. Wypisz, co poprawiłeś."],
@@ -1348,22 +1357,31 @@ const CHIPY = [
 function promptPelny() {
   const t = $("#claudeTekst").value.trim();
   const P = S.projekt;
-  const kontekst = P ? `Projekt rolki: ${P.nazwa} (folder ${P.sciezka}).\nBieżący krok w panelu: ${KROKI[S.krok]}.\nPliki: ${P.sciezka}/brief.md, ${P.sciezka}/kompozycja/rolka.json, ${P.sciezka}/napisy/transcript.json.` : "Nie wybrano jeszcze rolki (ekran startowy).";
-  return `Użyj skilla rolki-beauty (.claude/skills/rolki-beauty/SKILL.md) i zasad z CLAUDE.md.\n${kontekst}\nPracujesz w trybie bez pytań: zrób zadanie, zapisz zmiany w plikach i krótko napisz, co zrobiłeś. Nie renderuj finalu bez wyraźnej prośby.\n\nZadanie: ${t || "(wpisz zadanie)"}`;
+  const kontekst = P
+    ? `Projekt rolki: ${P.nazwa} (folder ${P.sciezka}).\nBieżący krok w panelu: ${KROKI[S.krok]}.\nPliki: ${P.sciezka}/brief.md, ${P.sciezka}/scenariusz.json, ${P.sciezka}/kompozycja/rolka.json, ${P.sciezka}/napisy/transcript.json.`
+    : PM.id ? `Otwarty szkic rolki: ${PM.sciezka}. Tu są profil, scenariusz i reżyseria. Projekt montażu powstaje po utworzeniu rolki.`
+      : "Ekran startowy panelu bez otwartej rolki.";
+  return `Użyj skilla rolki-beauty (.claude/skills/rolki-beauty/SKILL.md) i zasad z CLAUDE.md.\n${kontekst}\nGdy zadanie prosi o propozycję, odpowiedz w rozmowie. Gdy prosi o wykonanie, zapisz żądane zmiany i podsumuj. Nie renderuj finalu bez wyraźnej prośby.\n\n${kontekstOpcjiAI()}\n\nZadanie: ${t || "(wpisz zadanie)"}`;
 }
-function odswiezClaude() { $("#claudePelny").textContent = promptPelny(); }
-$("#claudeBtn").onclick = () => { $("#claude").classList.remove("ukryte"); odswiezClaude(); $("#claudeTekst").focus(); };
+function odswiezClaude() { $("#claudePelny").textContent = promptPelny(); odswiezPanelAI(); }
+$("#claudeBtn").onclick = () => { $("#claude").classList.remove("ukryte"); odswiezClaude(); ($("#claudeDobierz").disabled ? $("#claudeKatalog") : $("#claudeDobierz")).focus(); };
 $("#claudeZamknij").onclick = () => $("#claude").classList.add("ukryte");
 $("#claudeTekst").oninput = odswiezClaude;
 $("#claudeChipy").innerHTML = CHIPY.map(([n], i) => `<button data-i="${i}">${esc(n)}</button>`).join("");
 $("#claudeChipy").querySelectorAll("button").forEach((b) => (b.onclick = () => { $("#claudeTekst").value = CHIPY[b.dataset.i][1]; odswiezClaude(); }));
-$("#claudeKopiuj").onclick = async () => { try { await navigator.clipboard.writeText(promptPelny()); toast("Prompt skopiowany. Wklej go w Claude Code."); } catch { blad(new Error("Nie udało się skopiować")); } };
+$("#claudeKopiuj").onclick = async () => {
+  try {
+    const prompt = promptPelny(), { tekst } = await api(urlBriefuAI());
+    await navigator.clipboard.writeText(`${prompt}\n\n${tekst}`);
+    toast("Prompt skopiowany. Wklej go w Claude Code.");
+  } catch (e) { blad(e); }
+};
 $("#claudeWyslij").onclick = async () => {
   if (!$("#claudeTekst").value.trim()) return toast("Wpisz, co Claude ma zrobić");
   const log = $("#claudeLog");
   log.textContent = "";
   try {
-    const z = await api("/api/claude", { method: "POST", body: { prompt: promptPelny(), projekt: S.projekt?.nazwa } });
+    const z = await api("/api/claude", { method: "POST", body: { prompt: promptPelny(), projekt: S.projekt?.nazwa, pomysl: S.projekt ? null : PM.id } });
     $("#claudeWyslij").disabled = true;
     await sledz(z, "Claude pracuje", null, log);
     $("#claudeWyslij").disabled = false;
@@ -1375,23 +1393,7 @@ $("#claudeWyslij").onclick = async () => {
 // =====================================================================
 // Opcje Tak/Nie: efekty montażu (w rolka.json) i pomoce w panelu (w przeglądarce)
 // =====================================================================
-const EFEKTY = [
-  // [klucz, domyślnie, ikona, nazwa, opis]
-  ["wytnij_cisze", true, "✂️", "Wytnij ciszę i „yyy”", "Przy „Przygotuj nagrania” usuwa pauzy i zająknięcia. Szybsze tempo bez ręcznego cięcia."],
-  ["czysty_glos", true, "🎙️", "Czysty głos", "Przy „Przygotuj nagrania”: usuwa dudnienie i szum gabinetu, łagodzi syknięcia, wyrównuje głośność mowy. Zmiana działa po ponownym przygotowaniu nagrań."],
-  ["korekta_obrazu", true, "🌤️", "Kontrola i korekta obrazu", "Mierzy jasność, przepalenia i odcień każdego nagrania, ostrzega w panelu i łagodnie rozjaśnia zbyt ciemne ujęcia. Nigdy nie wygładza skóry ani nie podbija kolorów."],
-  ["zajawka", false, "👀", "Zajawka efektu na start", "Pierwsze 0,8 s to efekt końcowy (zdjęcie „po” albo ostatnie ujęcie) pod hookiem, potem cięcie na początek. Widz zostaje, żeby zobaczyć, jak do tego doszło."],
-  ["bodziec", false, "⚡", "Nowy bodziec co 3 s", "Gdy przez ponad 3 s nic się nie zmienia, kadr przeskakuje bliżej i z powrotem, jak druga kamera. Wypełnia tylko martwe miejsca."],
-  ["operator", false, "🎥", "Wirtualny operator kamery", "Kadr prowadzony jak przez operatora: przy mowie trzyma Twoją twarz, przy zabiegu idzie za ruchem dłoni, a na słowach powiedzianych z naciskiem płynnie najeżdża i dobija. Zastępuje „Zbliżenia na akcentach” w tych ujęciach."],
-  ["punch_in", false, "🔍", "Zbliżenia na akcentach", "Kadr lekko „wjeżdża” na słowach kluczowych i liczbach, a co drugie ujęcie z mową jest bliżej. Wygląda jak montaż z dwóch kamer."],
-  ["emoji", false, "✨", "Emoji nad słowami", "Nad słowami typu brwi, rzęsy, skóra, cena, tygodnie wyskakuje pasujące emoji. Najwyżej jedno na napis."],
-  ["dzwieki", false, "🔊", "Udźwiękowienie", "Uderzenie na starcie, „whoosh” przy przejściach i po zajawce, „pop” przy planszach, narastanie przed przed/po, cichy klik przy bodźcach. Dźwięki są nasze, bez problemu z licencją."],
-  ["ambient", false, "🏠", "Ambient gabinetu", "Bardzo cichy szum pomieszczenia pod całą rolką. Cięcia nie „urywają” ciszy, rolka brzmi jak nagrana w jednym miejscu, drożej. Dźwięki zabiegu (pęseta, spray…) dodasz przy ujęciu w Narzędziach ujęcia."],
-  ["wycisz_muzyke", false, "🎚️", "Muzyka cichnie pod głosem", "Gdy mówisz, muzyka schodzi w dół, a w pauzach wraca. Działa, gdy w rolce jest muzyka i napisy."],
-  ["rozmycie_ruchu", false, "💨", "Rozmycie ruchu (jak z kamery)", "Napisy, ozdoby i plansze w szybkim ruchu dostają smugę jak z prawdziwej migawki, zamiast być idealnie ostre. Render trwa trochę dłużej."],
-  ["pasek_postepu", false, "▬", "Pasek postępu", "Cienki pasek u góry pokazuje, ile zostało. Ludzie częściej oglądają do końca."],
-  ["zapetlenie", false, "🔁", "Zapętlone zakończenie", "Ostatnie 0,4 s przechodzi w pierwsze ujęcie, więc rolka kręci się bez szwu."],
-];
+const efektyMontazu = () => S.start?.opcjeMontazu?.efekty || [];
 const OPCJE_PANELU = [
   // [klucz, ikona, nazwa, opis]
   ["podpowiedzi", "💡", "Podpowiedzi", "Na górze każdego kroku: co tu robisz i po co."],
@@ -1400,7 +1402,7 @@ const OPCJE_PANELU = [
   ["ramka", "📱", "Podgląd w ramce Instagrama", "Odtwarzacz wygląda jak telefon z przyciskami IG. Od razu widać, czy nic nie zasłania napisów."],
   ["autoRecenzja", "🎯", "Recenzja od pierwszego pomysłu", "Gdy Claude napisze pierwszy scenariusz, niezależna recenzentka od razu go ocenia, a słaby (poniżej 85/100) dopracowuje w pętli, zanim go zobaczysz. Ok. 1-6 min, 0,2-1,5 USD z konta Claude Code."],
 ];
-function efekt(k) { const e = S.projekt?.rolka?.efekty || {}; const d = EFEKTY.find((x) => x[0] === k); return e[k] ?? (d ? d[1] : false); }
+function efekt(k) { const e = S.projekt?.rolka?.efekty || {}; const d = efektyMontazu().find((x) => x[0] === k); return e[k] ?? (d ? d[1] : false); }
 function ustawEfekt(k, v) { const r = rolka(); r.efekty = { ...(r.efekty || {}), [k]: !!v }; zapiszRolke(); }
 function opcjePanelu() { try { return JSON.parse(localStorage.getItem("opcjePanelu") || "{}"); } catch { return {}; } }
 function opcja(k) { return opcjePanelu()[k] !== false; }
@@ -1774,6 +1776,7 @@ ${uwagaMontazu()}${OS().mian} jest w panelu na kroku „${KROKI[S.krok]}” i ni
 
 Czego brakuje według panelu:
 ${lista.length ? lista.join("\n") : "- panel nie widzi braków; sprawdź rolkę i zaproponuj, co jeszcze poprawić"}
+${kontekstOpcjiAI()}
 
 Zasady rozmowy:
 1. Najpierw przeczytaj pliki rolki i zobacz, co jest w raw/ i proxy/. Nie pytaj o to, co da się ustalić z plików albo rozsądnie zaproponować. Wtedy po prostu to zrób i powiedz w jednym zdaniu.
@@ -1793,9 +1796,9 @@ Nigdy nie zakładaj zgody na wizerunek klientki: o nią zawsze zapytaj. Zero obi
 // =====================================================================
 function promptAutopilota(P) {
   const n = P.nazwa;
-  return `Użyj skilla rolki-beauty (.claude/skills/rolki-beauty/SKILL.md) i zasad z CLAUDE.md (sekcja „Jak to działa” opisuje WSZYSTKIE funkcje i pola rolka.json, komendy są w sekcji „Komendy”).
+  return `Użyj skilla rolki-beauty (.claude/skills/rolki-beauty/SKILL.md) i zasad z CLAUDE.md (sekcja „Jak to działa” opisuje funkcje i pola rolka.json).
 
-Jesteś AUTOPILOTEM montażu. ${OS().mian} tylko wrzuciła nagrania do rolki ${n} (folder ${P.sciezka}, pliki w raw/). Ty robisz całą resztę: rozpoznajesz nagrania, robisz krótki wywiad (co chce, a czego nie), montujesz ze wszystkimi pasującymi funkcjami, renderujesz, sprawdzasz i poprawiasz. Ona tylko odpowiada na pytania przyciskami.
+Jesteś AUTOPILOTEM montażu. ${OS().mian} wrzuciła nagrania do rolki ${n} (folder ${P.sciezka}, pliki w raw/). Rozpoznaj nagrania, zrób krótki wywiad i zmontuj rolkę zgodnie z decyzjami. Panel po otrzymaniu montażu sam uruchamia sprawdzanie i render.
 
 PROFIL GABINETU: 02_BRAND/gabinet.md (jeśli istnieje): zabiegi i ceny, klientki, wyróżnik, ton, czego NIE pokazywać. Trzymaj się go w pomysłach, hookach i CTA; nie wymyślaj zabiegów ani cen spoza niego.
 
@@ -1805,8 +1808,9 @@ PLAN TYGODNIA: jeśli brief.md ma w sekcji „Notatki” rolkę z planu tygodnia
 
 ETAP 1. ROZPOZNANIE (od razu, bez pytania):
 - npm run rozpoznaj -- ${n}, potem przeczytaj ${P.sciezka}/kompozycja/rozpoznanie.json.
-- npm run normalizuj -- ${n} --cisza
-- Każde nagranie z mową (typ „mowa” albo głośny dźwięk z mową): npm run transkrybuj -- ${n} proxy/<klip>.mp4
+- npm run normalizuj -- ${n} zgodnie z preferencjami. Użyj --cisza, jeśli wycinanie ciszy jest wybrane.
+- Jeśli istnieje scenariusz z opisami scen, uruchom node scripts/dopasuj-ujecia.mjs "${P.sciezka}". Wczytaj kompozycja/dopasowania-ujec.json z projektu. Do scen dobierz najlepsze fragmenty z podanych zakresów po obejrzeniu kadru. Jeśli nie ma trafienia, sprawdź rozpoznanie lub wskaż, co dograć.
+- Jeśli scenariusz ma kwestie do nagrania, użyj npm run dopasuj-kwestie -- ${n} i zachowaj ręczne wybory. Przy filmie bez przygotowanych kwestii transkrybuj rozpoznane klipy z mową poleceniem npm run transkrybuj -- ${n} proxy/<klip>.mp4.
 - Długie komendy (normalizuj, transkrybuj, render, obiekt, akcja, kontrola-obrazu) uruchamiaj z parametrem timeout 600000.
 - Potem napisz w 2-3 zdaniach, co widzisz na nagraniach (konkretnie: czynności, efekt, jakość, twarz klientki), i zadaj pierwsze pytanie.
 
@@ -1814,27 +1818,27 @@ ETAP 2. WYWIAD: jedno pytanie naraz, maks. 7 pytań, tylko o to, czego nie wiesz
 a) Pomysł: 2-3 kąty rolki dopasowane do TEGO, co nagrała (np. przemiana, edukacja „3 błędy”, POV, mit/fakt).
 b) Hook: 3 propozycje tekstu na ekran (3-7 słów, jedno *słowo* = akcent) pod najmocniejsze ujęcie, plus „Napiszę swój”.
 c) Zgoda na wizerunek: ZAWSZE pytaj, gdy rozpoznanie widzi twarz klientki. Zapisz w brief.md „zgoda na wizerunek: tak/nie”. Bez zgody: kadruj bez twarzy (kadr, przycięcie) albo pomiń te ujęcia.
-d) Funkcje: JEDNO pytanie z pakietem, który polecasz dla tych nagrań. Wypisz w punktach 4-7 funkcji z CLAUDE.md, które naprawdę tu pasują, np. napisy reagujące na głos, wirtualny operator kamery, cięcia na akcji i przyspieszenie powtarzalnych ruchów, proporcje brwi albo obrys z mapy twarzy, przed/po wyrównane (kurtyna po łuku brwi), zdjęcie 3D, reflektor albo poświata na narzędziu (obiekt SAM 2), zajawka efektu, dźwięki, emoji, styl ruchu. Zapytaj wprost, czego NIE chce. OPCJE: Tak, wszystko | Bez <najbardziej dyskusyjnej> | Wybiorę sama. Przy „Wybiorę sama” dopytaj krótko po kolei (tak/nie).
+d) Funkcje: zaproponuj jeden spójny pakiet. Wypisz 4-7 decyzji „Użyj” i 2-3 „Pomiń” z krótkim uzasadnieniem dla tych nagrań i z uwzględnieniem katalogu poniżej. Dołącz plan na konkretne sceny, jedną propozycję stylu i powód. Wybieraj tylko techniki, które wzmocnią treść. OPCJE: Użyj pakietu | Bez <najbardziej dyskusyjnej> | Wybiorę sama. Przy „Wybiorę sama” dopytaj krótko po kolei (tak/nie).
 e) Dźwięk: mowa z nagrania, lektor czy sama muzyka dodana w aplikacji Instagrama (muzyka tylko z licencją albo w aplikacji).
 f) Długość i CTA: zaproponuj (zwykle 15-30 s, jedno CTA).
 Styl napisów i styl ruchu: weź z pamięci albo dołóż do pytania d.
 Charakter montażu: weź z pamięci (ustawienia.montaz) albo dołóż do pytania d: reklamowy (plansze w kolorach marki, logo, dźwięki, efekty przejść) czy naturalny jak u vlogerki (rolka.json -> "montaz": "naturalny": tekst jak z Instagrama, cięcia, białe proste napisy, bez sfx i znaku wodnego; zloz przerabia to sam, scripts/montaz-naturalny.mjs).${uwagaMontazu()}
+${kontekstOpcjiAI()}
 
 ETAP 3. MONTAŻ (sam, bez pytań):
 - brief.md: temat, hook, CTA, zgoda na wizerunek, notatki.
 - ${P.sciezka}/kompozycja/rolka.json: ujęcia z proxy/ (najlepsze fragmenty wg rozpoznania i jakości; mowę tnij między słowami według transkrypcji; w 1. sekundzie mocny obraz, efekt na końcu, zajawka efektu na start gdy pasuje), scena hook-tytul z wybranym hookiem, CTA, napisy (plik transkrypcji i zrodlo), efekty i pola funkcji TYLKO tych, które ${OS().mian} chce, ruch, styl napisów. Szablony scen: 04_SZABLONY_HF/README.md.
 - Funkcje ze skryptami: npm run akcja -- ${n} --zapisz; npm run przejscia -- ${n} --zapisz; obiekt (reflektor, poświata, tekst za): najpierw obejrzyj klatkę (ffmpeg -ss <t> -i ${P.sciezka}/proxy/<klip>.mp4 -frames:v 1 -vf scale=540:960 <plik.jpg> i przeczytaj obraz), wybierz środek obiektu w pikselach 1080x1920, potem npm run obiekt -- ${n} proxy/<klip>.mp4 --x X --y Y --t T --od OD --do DO --id o1 i dopisz ujęciu "obiekty". Mapa twarzy liczy się sama przy złożeniu (pola sledzenie, kadr, zoom_na z "twarz").
-- npm run zloz -- ${n} --force, potem npm run render -- ${n} (wersja robocza), potem npm run kontrola-obrazu -- ${n} --znaczniki i przeczytaj ${P.sciezka}/kompozycja/kontrola-obrazu.json. Problemy krytyczne i ważne popraw w rolka.json (np. napisy.od_dolu, pozycja sceny, kolor), złóż i wyrenderuj jeszcze raz (maks. 2 rundy). Znaczniki „kontrola”, które naprawiłaś: stan „zrobione” i krótka odpowiedz.
-- Potem 4-6 zdań: co zmontowałaś, które funkcje włączyłaś, wynik kontroli obrazu, gdzie obejrzeć (panel: krok Render albo Sceny). Pytanie z OPCJE: Robimy final | Popraw coś | Zmień hook
+- Po zapisaniu rolka.json opisz krótko wybrane ujęcia i efekty. W ostatniej linii napisz dokładnie MONTAŻ DO KONTROLI. Panel zrobi kontrolę i podgląd. Nie uruchamiaj renderowania, kontroli ani finalu z rozmowy.
 
-ETAP 4. POPRAWKI I FINAL: poprawki według jej słów (po każdej zmianie złóż i wyrenderuj wersję roboczą). Final tylko po jej potwierdzeniu i ze zgodą, gdy widać twarz klientki: npm run render -- ${n} --final, npm run okladka -- ${n}, npm run sprawdz -- ${n}. Potem zapisz pamięć, napisz, co jest gotowe (final/...), co zostało jej (publikacja, opis), a w ostatniej linii samo słowo: GOTOWE
+ETAP 4. POPRAWKI: wykorzystaj raport kompozycja/audyt-autopilota.json, gdy istnieje. Wykonaj proszone zmiany i zakończ MONTAŻ DO KONTROLI. Wersja końcowa powstaje z przycisku w panelu po akceptacji podglądu.
 
 ZASADY: Każda Twoja odpowiedź kończy się pytaniem z osobną ostatnią linią
 OPCJE: odpowiedź 1 | odpowiedź 2 | odpowiedź 3
-(2-4 krótkie, pierwsza = Twoja rekomendacja) albo samym słowem GOTOWE. Po polsku, na „Ty”, krótko, mówionym stylem, bez długich myślników. Nie pytaj o rzeczy techniczne (fps, pliki, ścieżki). Zero obietnic medycznych i gwarancji, przed/po zawsze z „efekt indywidualny”, podologia bez szokującego startu. Niczego nie publikujesz. Gdy komenda się nie uda, obejdź problem (inna kolejność, bez tej jednej funkcji) i powiedz o tym w pół zdania.`;
+(2-4 krótkie, pierwsza = Twoja rekomendacja) albo linią MONTAŻ DO KONTROLI po zmianie montażu. Po polsku, na „Ty”, krótko, mówionym stylem, bez długich myślników. Nie pytaj o rzeczy techniczne (fps, pliki, ścieżki). Zero obietnic medycznych i gwarancji, przed/po zawsze z „efekt indywidualny”, podologia bez szokującego startu. Niczego nie publikujesz. Gdy komenda się nie uda, powiedz, co się nie udało i co można zrobić.`;
 }
 const kluczAutopilota = (p) => `autopilot_${p}`;
-function zapiszAutopilota(dane) { try { localStorage.setItem(kluczAutopilota(S.projekt.nazwa), JSON.stringify(dane)); } catch {} }
+function zapiszAutopilota(dane, p) { try { localStorage.setItem(kluczAutopilota(p), JSON.stringify(dane)); } catch {} }
 function stanAutopilota(p) { try { return JSON.parse(localStorage.getItem(kluczAutopilota(p)) || "null"); } catch { return null; } }
 function uruchomAutopilota(wznow) {
   const st = wznow ? stanAutopilota(S.projekt.nazwa) : null;
@@ -1880,8 +1884,11 @@ async function startAutopilota(pre = {}) {
         try { const r = await fetch(`/api/projekt/${encodeURIComponent(nazwa)}/raw?nazwa=${encodeURIComponent(pliki[i].name)}`, { method: "POST", body: pliki[i] }); if (!r.ok) throw new Error((await r.json().catch(() => ({}))).blad || r.status); }
         catch (e) { blad(new Error(`Nie wgrałam ${pliki[i].name}: ${e.message || e}`)); }
       }
-      toast("Nagrania w rolce, startuje autopilot", 2500);
       await otworz(nazwa, 2);
+      if (S.projekt?.nazwa !== nazwa || !S.projekt.pliki.raw.some((f) => f.typ === "wideo" || f.typ === "zdjecie")) {
+        return toast("Brakuje czytelnych nagrań lub zdjęć. Sprawdź pliki w projekcie.", 4500);
+      }
+      toast("Nagrania w rolce, startuje autopilot", 2500);
       uruchomAutopilota(false);
     } });
   };
@@ -1889,7 +1896,9 @@ async function startAutopilota(pre = {}) {
 function kartaAutopilota() {
   const st = S.projekt && stanAutopilota(S.projekt.nazwa);
   if (!st) return "";
-  return `<div class="karta ap-karta"><div class="naglowek"><div><h3>🪄 Autopilot ${st.gotowe ? "skończył" : "pracuje nad tą rolką"}</h3><p class="podpowiedz">${st.gotowe ? "Rolka zrobiona. Możesz wrócić do rozmowy i poprosić o poprawki." : "Wróć do rozmowy, jeśli zamknęłaś okno albo odświeżyłaś panel."}</p></div><button class="btn" id="apWroc">Wróć do rozmowy</button></div></div>`;
+  const tekst = st.gotowe ? "Wersja końcowa gotowa." : st.idZadania ? "Trwa montaż lub kontrola."
+    : S.projekt.audytAutopilota?.aktualny ? "Sprawdzona wersja robocza czeka na obejrzenie." : "Wróć do rozmowy, aby kontynuować.";
+  return `<div class="karta ap-karta"><div class="naglowek"><div><h3>🪄 Autopilot</h3><p class="podpowiedz">${tekst}</p></div><button class="btn" id="apWroc">Wróć do rozmowy</button></div></div>`;
 }
 function dymek(kto, html) {
   const d = document.createElement("div");
@@ -1901,6 +1910,8 @@ function dymek(kto, html) {
 function formatuj(t) { return esc(t).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/\*([^*\n]+?)\*/g, "<em>$1</em>").replace(/\n/g, "<br>"); }
 function otworzAsystenta(wlasne) {
   if (!S.projekt) return toast("Najpierw otwórz rolkę");
+  const nowyKlucz = S.projekt.nazwa + (wlasne?.prompt ? "|" + wlasne.tytul : "");
+  if (A.pracuje && A.klucz !== nowyKlucz) return toast("Poczekaj na wynik bieżącej rozmowy.");
   A.wlasne = wlasne && wlasne.prompt ? wlasne : null;
   $("#asystent h3").textContent = (A.wlasne?.autopilot ? "" : "✦ ") + (A.wlasne?.tytul || "Dokończ z Claude");
   const opis = $("#asystentOpis");
@@ -1912,14 +1923,15 @@ function otworzAsystenta(wlasne) {
     dymek("od-claude", "Komenda <code>claude</code> nie jest zainstalowana albo nie jest zalogowana w terminalu. Otwórz terminal, wpisz <code>claude</code> i zaloguj się, potem odśwież panel.");
     return;
   }
-  const klucz = S.projekt.nazwa + (A.wlasne ? "|" + A.wlasne.tytul : "");
+  const klucz = nowyKlucz;
   if (A.klucz === klucz) return;
   // autopilot po odświeżeniu panelu: ta sama sesja Claude, ostatnie pytanie i przyciski
-  if (A.wlasne?.wznow?.sesja) {
+  if (A.wlasne?.wznow?.sesja || A.wlasne?.wznow?.idZadania) {
     const w = A.wlasne.wznow;
     A.projekt = S.projekt.nazwa; A.sesja = w.sesja; A.gotowe = !!w.gotowe; A.klucz = klucz;
     $("#asystentRozmowa").innerHTML = "";
     dymek("od-claude", formatuj(w.ostatnia || "Wracamy do rozmowy."));
+    if (w.idZadania) return odbierzAsystenta(() => api(`/api/zadanie/${encodeURIComponent(w.idZadania)}`));
     rysujOpcjeAsystenta(w.opcje || [], !!w.gotowe);
     return;
   }
@@ -1936,41 +1948,76 @@ function nowaRozmowa() {
   wyslijDoAsystenta(promptAsystenta(), null);
 }
 async function wyslijDoAsystenta(prompt, pokazJako) {
-  if (A.pracuje) return;
+  if (A.pracuje || S.zadanie || S.projekt?.nazwa !== A.projekt) return;
   if (pokazJako) dymek("od-ciebie", formatuj(pokazJako));
+  const autopilot = !!A.wlasne?.autopilot;
+  if (autopilot && !prompt.includes("MONTAŻ DO KONTROLI")) {
+    prompt += "\n\nJeśli zmienisz montaż, zakończ odpowiedź osobną linią MONTAŻ DO KONTROLI. Panel uruchomi audyt i render. Wywiad kończ linią OPCJE.";
+  }
+  return odbierzAsystenta(() => api("/api/claude", { method: "POST", body: { prompt, projekt: A.projekt, sesja: A.sesja, autopilot } }));
+}
+async function odbierzAsystenta(pobierzZadanie) {
+  const projekt = A.projekt;
+  const autopilot = !!A.wlasne?.autopilot;
+  const poprzedni = autopilot ? stanAutopilota(projekt) : null;
   $("#asystentOpcje").innerHTML = "";
   A.pracuje = true;
   $("#asystentPracuje").classList.remove("ukryte");
   $("#asystentStatus").textContent = A.sesja ? "Claude zapisuje i myśli dalej…" : "Claude sprawdza rolkę…";
   $("#asystentWyslij").disabled = true;
   // podgląd, co Claude właśnie robi (linie narzędzi zaczynają się od ›)
-  const naLinie = (l) => { if (l.startsWith("›")) $("#asystentStatus").textContent = "Claude: " + l.slice(2, 70); };
+  const naLinie = (l) => {
+    if (l.startsWith("›")) $("#asystentStatus").textContent = "Claude: " + l.slice(2, 70);
+    else if (/próbki|porównuje poprawki|recenzja montażu|Renderuję podgląd/.test(l)) $("#asystentStatus").textContent = l;
+  };
+  const przywroc = () => {
+    if (!autopilot) return;
+    const dane = { ...poprzedni, sesja: A.sesja, idZadania: null };
+    if (dane.sesja) zapiszAutopilota(dane, projekt);
+    else { try { localStorage.removeItem(kluczAutopilota(projekt)); } catch {} }
+    rysujOpcjeAsystenta(dane.opcje || [], !!dane.gotowe);
+  };
   try {
-    const z = await api("/api/claude", { method: "POST", body: { prompt, projekt: S.projekt.nazwa, sesja: A.sesja } });
-    const { kod, wynik, sesja } = await sledz(z, "Asystent Claude", null, naLinie);
+    const z = await pobierzZadanie();
+    if (autopilot) zapiszAutopilota({ ...poprzedni, idZadania: z.id, gotowe: false }, projekt);
+    const { kod, wynik = "", sesja, audyt } = await sledz(z, autopilot ? "Autopilot" : "Asystent Claude", null, naLinie);
     if (sesja) A.sesja = sesja;
-    pokazOdpowiedz(kod, wynik || "");
-  } catch (e) { dymek("od-claude blad", formatuj("Nie udało się: " + (e.message || e))); }
-  A.pracuje = false;
-  $("#asystentPracuje").classList.add("ukryte");
-  $("#asystentWyslij").disabled = false;
-  S.napisy = null;
-  try { S.szablony = await api("/api/szablony"); } catch {} // Claude mógł dodać własny szablon (animacja z opisu)
-  try { await odswiezProjekt(); } catch {}
+    const marker = /^MONTA[ŻZ] DO KONTROLI\s*\.?$/i.test(wynik.trim().split(/\r?\n/).at(-1) || "");
+    if (autopilot && (audyt || marker)) {
+      const opis = wynik.trim().split(/\r?\n/).filter((l) => !/^MONTA[ŻZ] DO KONTROLI|^OPCJE:|^GOTOWE/i.test(l)).join("\n");
+      pokazWynikAudytuAsystenta(kod === 0 || audyt?.blad ? audyt : null, opis);
+    } else {
+      pokazOdpowiedz(kod, wynik);
+      if (kod !== 0) przywroc();
+    }
+  } catch (e) {
+    dymek("od-claude blad", formatuj("Nie udało się: " + (e.message || e)));
+    przywroc();
+  } finally {
+    A.pracuje = false;
+    $("#asystentPracuje").classList.add("ukryte");
+    $("#asystentWyslij").disabled = false;
+    if (S.projekt?.nazwa === projekt) {
+      S.napisy = null;
+      try { S.szablony = await api("/api/szablony"); } catch {}
+      try { if (S.projekt?.nazwa === projekt) await odswiezProjekt(); } catch {}
+    }
+  }
 }
 function pokazOdpowiedz(kod, wynik) {
   if (/failed to authenticate|oauth|not logged in|please run \/login/i.test(wynik)) return dymek("od-claude blad", "Claude w terminalu nie jest zalogowany (sesja wygasła).<br><b>Co zrobić:</b> otwórz terminal, wpisz <code>claude</code>, potem <code>/login</code>. Po zalogowaniu kliknij „Od nowa”.");
-  if (kod !== 0 && !wynik) return dymek("od-claude blad", "Claude zakończył z błędem. Kliknij „Log” na dolnym pasku, żeby zobaczyć szczegóły.");
+  if (kod !== 0) return dymek("od-claude blad", wynik ? formatuj(wynik) : "Claude zakończył z błędem. Szczegóły znajdziesz w logu.");
   const linie = wynik.trim().split("\n");
   let opcje = [];
   const i = linie.findLastIndex((l) => /^\s*OPCJE\s*:/i.test(l));
   if (i >= 0) { opcje = linie[i].replace(/^\s*OPCJE\s*:/i, "").split("|").map((s) => s.trim()).filter(Boolean).slice(0, 4); linie.splice(i, 1); }
-  const gotowe = /^\s*GOTOWE\s*\.?\s*$/i.test(linie.at(-1) || "");
-  if (gotowe) linie.pop();
+  const znacznikGotowe = /^\s*GOTOWE\s*\.?\s*$/i.test(linie.at(-1) || "");
+  if (znacznikGotowe) linie.pop();
+  const gotowe = znacznikGotowe && !A.wlasne?.autopilot;
   const tekst = linie.join("\n").trim() || "(brak odpowiedzi)";
   dymek("od-claude", formatuj(tekst));
   A.gotowe = gotowe;
-  if (A.wlasne?.autopilot) zapiszAutopilota({ sesja: A.sesja, ostatnia: tekst, opcje, gotowe, data: new Date().toISOString() });
+  if (A.wlasne?.autopilot) zapiszAutopilota({ sesja: A.sesja, ostatnia: tekst, opcje, gotowe, data: new Date().toISOString() }, A.projekt);
   rysujOpcjeAsystenta(opcje, gotowe);
 }
 function rysujOpcjeAsystenta(opcje, gotowe) {
@@ -1981,7 +2028,8 @@ function rysujOpcjeAsystenta(opcje, gotowe) {
     toast("Claude uzupełnił rolkę");
   } else {
     box.innerHTML = opcje.map((o, n) => `<button data-o="${esc(o)}" class="${n === 0 ? "polecana" : ""}">${n === 0 ? "★ " : ""}${esc(o)}</button>`).join("");
-    box.querySelectorAll("[data-o]").forEach((b) => (b.onclick = () => wyslijDoAsystenta(b.dataset.o, b.dataset.o)));
+    box.querySelectorAll("[data-o]").forEach((b) => (b.onclick = () => A.wlasne?.autopilot
+      ? akcjaAutopilota(b.dataset.o).catch(blad) : wyslijDoAsystenta(b.dataset.o, b.dataset.o)));
   }
 }
 document.querySelectorAll("#claude [data-asystent]").forEach((b) => (b.onclick = () => otworzAsystenta()));
@@ -2034,6 +2082,8 @@ OPCJE: odpowiedź 1 | odpowiedź 2 | odpowiedź 3
 OPCJE: Zatwierdzam, tworzymy rolkę | Mocniejszy hook | Krócej i szybciej | Inny format
 5. Poprawki: zmieniasz tylko to, o co prosi, zapisujesz plik i mówisz w 1-2 zdaniach, co zmieniłaś. Znowu OPCJE jak w punkcie 4. Gdy ${OS().mian} napisze, że nie ma jakiegoś materiału, zamień go na coś, co łatwo nagrać, i popraw scenariusz.
 6. Gdy ${OS().mian} zatwierdza: ustaw etap "gotowy", zapisz plik, napisz krótko „co teraz” (dostarczyć materiały w panelu) i w ostatniej linii samo słowo: GOTOWE
+
+${S.start.rezyseria.prompt}
 
 ZASADY ROLKI (najważniejsze)
 - MOCNY HOOK: w pierwszej sekundzie jednocześnie mocny obraz (efekt, ruch, zbliżenie) i krótki tekst na ekranie. Bez „cześć, dzisiaj powiem”. Hook ma otwierać pętlę ciekawości, którą zamykasz dopiero na końcu.
@@ -2153,6 +2203,7 @@ async function wyslijPomysl(prompt, widoczne) {
   if (PM.pracuje) return;
   // gotowy scenariusz (3 gotowe pomysły, plan tygodnia) bez rozmowy z Claude: pierwsza wiadomość dostaje pełny kontekst scenarzystki
   if (!PM.rozmowa.sesja && PM.dane?.etap && PM.dane.etap !== "profil" && !prompt.includes("JAK PROWADZISZ ROZMOWĘ")) prompt = promptPomyslu("gotowy", widoczne) + "\n\n" + prompt;
+  if (!prompt.includes("REŻYSERIA MONTAŻU")) prompt += "\n\n" + S.start.rezyseria.prompt;
   const id = PM.id;
   PM.rozmowa.wiadomosci.push({ kto: "ty", tekst: widoczne });
   dymekPm("ty", widoczne);
@@ -2162,10 +2213,12 @@ async function wyslijPomysl(prompt, widoczne) {
   zapiszRozmowe();
   PM.odpytywanie = setInterval(odswiezPomyslZPliku, 2500);
   const naLinie = (l) => { if (l.startsWith("›") && $("#pmStatus")) $("#pmStatus").textContent = "Claude: " + l.slice(2, 70).replace(/Write: pomysl\.json/, "zapisuje profil rolki").replace(/Read: /, "czyta "); };
+  let udaloSie = false;
   try {
-    const z = await api("/api/claude", { method: "POST", body: { prompt, projekt: null, sesja: PM.rozmowa.sesja } });
+    const z = await api("/api/claude", { method: "POST", body: { prompt, projekt: null, pomysl: id, sesja: PM.rozmowa.sesja } });
     const { kod, wynik, sesja } = await sledz(z, "Claude: nowa rolka", null, naLinie);
     if (PM.id !== id) return;
+    udaloSie = kod === 0;
     if (sesja) PM.rozmowa.sesja = sesja;
     if (/failed to authenticate|oauth|not logged in|please run \/login/i.test(wynik || "")) { PM.rozmowa.wiadomosci.push({ kto: "blad", tekst: "Claude w terminalu nie jest zalogowany. Otwórz terminal, wpisz claude, potem /login i napisz tu jeszcze raz." }); }
     else if (kod !== 0 && !wynik) PM.rozmowa.wiadomosci.push({ kto: "blad", tekst: "Claude zakończył z błędem. Kliknij „Log” na dolnym pasku albo spróbuj jeszcze raz." });
@@ -2185,6 +2238,14 @@ async function wyslijPomysl(prompt, widoczne) {
   dymekPm(ost.kto, ost.tekst);
   await zapiszRozmowe();
   await odswiezPomyslZPliku();
+  if (udaloSie && PM.id === id && PM.dane?.scenariusz?.some((w) => w && czasScenyRez(w) > 0 && !w.rezyseria?.zdarzenia.length)) {
+    try {
+      const z = await api(`/api/pomysl/${encodeURIComponent(id)}/rezyseria`, { method: "POST", body: { zakres: "braki" } });
+      const { kod } = await sledz(z, "Uzupełniam reżyserię montażu");
+      if (kod === 0 && PM.id === id) await odswiezPomyslZPliku();
+    } catch (e) { blad(e); }
+  }
+  if (PM.id !== id) return;
   ustawPracePm(false);
   rysujOpcjePm();
   rysujProfil();
@@ -2383,7 +2444,7 @@ function rysujProfil() {
     ${kartaTurnieju()}
     ${sek("🧲 Jak utrzymamy uwagę do końca", (P.utrzymanie || []).length ? `<ul class="pm-lista">${P.utrzymanie.map((u) => `<li>${esc(u)}</li>`).join("")}</ul>${Object.values(P.efekty || {}).some(Boolean) ? `<div class="przepis-efekty" title="Efekty montażu, które włączę w rolce">${Object.entries(P.efekty).filter(([, v]) => v).map(([k]) => `<span title="${esc(nazwaEfektu(k))}">${ikonaEfektu(k)} <small>${esc(nazwaEfektu(k))}</small></span>`).join("")}</div>` : ""}` : "", "Popraw utrzymanie uwagi: ", "Plan pojawi się razem ze scenariuszem.")}
     ${kartaKrzywej(ocena)}
-    ${sek(`🎬 Scenariusz ${dl ? `<small class="podpowiedz">${r1(dl)} s</small>` : ""}`, sc.length ? `<div class="pm-scenariusz">${sc.map((w, i) => { const uw = uwagiWiersza(i); return `<div class="pm-wiersz ${uw.length ? "pm-wiersz-uwaga" : ""}" data-wiersz="${i}"><span class="pm-czas">${r1(w.od)}-${r1(w.do)} s${w.rola ? `<br><span class="chip">${esc(w.rola)}</span>` : ""}</span><div><b>${esc(w.co_widac)}</b>${w.na_ekranie ? `<small>🪧 ${esc(w.na_ekranie)}</small>` : ""}${w.mowisz ? `<small>🎙️ „${esc(w.mowisz)}”</small>` : ""}${w.bodziec ? `<small>⚡ ${esc(w.bodziec)}</small>` : ""}${w.pytanie_widza ? `<small>❓ ${esc(w.pytanie_widza)}</small>` : ""}${uw.length ? `<small class="pm-uwaga-wiersza">⚠ ${uw.map((t) => esc(t.tekst)).join(" · ")}</small>` : ""}</div>${w.material ? `<span class="chip">${esc(w.material)}</span>` : ""}</div>`; }).join("")}</div>` : "", "Popraw scenariusz: ", "Scenariusz sekunda po sekundzie pojawi się po pytaniach.")}
+    ${sek(`🎬 Scenariusz ${dl ? `<small class="podpowiedz">${r1(dl)} s</small>` : ""}`, sc.length ? `<div id="scenariuszPomyslu">${pasekRezyserii(sc)}<div class="pm-scenariusz">${sc.map((w, i) => { const uw = uwagiWiersza(i); return `<div class="pm-wiersz ${uw.length ? "pm-wiersz-uwaga" : ""}" data-wiersz="${i}"><span class="pm-czas">${r1(w.od)}-${r1(w.do)} s${w.rola ? `<br><span class="chip">${esc(w.rola)}</span>` : ""}</span><div><b>${esc(w.co_widac)}</b>${w.na_ekranie ? `<small>🪧 ${esc(w.na_ekranie)}</small>` : ""}${w.mowisz ? `<small>🎙️ „${esc(w.mowisz)}”</small>` : ""}${w.bodziec ? `<small>⚡ ${esc(w.bodziec)}</small>` : ""}${w.pytanie_widza ? `<small>❓ ${esc(w.pytanie_widza)}</small>` : ""}${uw.length ? `<small class="pm-uwaga-wiersza">⚠ ${uw.map((t) => esc(t.tekst)).join(" · ")}</small>` : ""}</div>${w.material ? `<span class="chip">${esc(w.material)}</span>` : ""}${rezyseriaSceny(w, i)}</div>`; }).join("")}</div></div>` : "", "Popraw scenariusz: ", "Scenariusz sekunda po sekundzie pojawi się po pytaniach.")}
     ${sek(`📦 Co mi dostarczasz <small class="podpowiedz">${mat.length ? `${mat.filter((x) => x.obowiazkowy !== false).length} obowiązkowe, ${mat.filter((x) => x.obowiazkowy === false).length} dodatkowe` : ""}</small>`, mat.length ? `<div class="pm-materialy">${mat.map((x) => kartaMaterialu(x)).join("")}</div>` : "", "Popraw listę materiałów: ", "Lista ujęć i zdjęć do nagrania pojawi się razem ze scenariuszem.")}
     ${gotowe ? `<div class="karta pm-utworz"><div><h3>${P.etap === "gotowy" ? "Zatwierdzone ✓" : "Podoba się?"}</h3><p class="podpowiedz">${P.etap === "gotowy" ? "Utwórz rolkę: scenariusz trafi do briefu, a lista materiałów do kroku Nagrania, gdzie wgrasz pliki." : "Możesz zatwierdzić od razu albo najpierw poprosić o poprawki w rozmowie."}</p></div><button class="btn duzy" id="pmUtworz">✓ Utwórz rolkę</button></div>` : ""}`;
   box.querySelectorAll("[data-popraw]").forEach((b) => (b.onclick = () => popraw(b.dataset.popraw)));
@@ -2401,6 +2462,18 @@ function rysujProfil() {
   box.querySelectorAll("[data-niemam]").forEach((b) => (b.onclick = () => { const x = mat.find((m) => m.id === b.dataset.niemam); wyslijPomysl(`Nie mam materiału ${x.id} (${x.opis}) i nie dam rady go nagrać. Zamień go na coś łatwego i popraw scenariusz.` + przypomnienie(), `Nie mam ${x.id}: ${x.opis}`); }));
   const u = $("#pmUtworz", box); if (u) u.onclick = utworzRolkeZPomyslu;
   podepnijKartyMat(box, mat);
+  const idRezyserii = PM.id;
+  const urlRezyserii = `/api/pomysl/${encodeURIComponent(idRezyserii)}`;
+  podepnijRezyserie($("#scenariuszPomyslu", box), {
+    url: urlRezyserii, dokument: () => PM.id === idRezyserii ? PM.dane : null,
+    odswiez: async (otwarte) => {
+      const p = await api(urlRezyserii);
+      if (PM.id !== idRezyserii) return;
+      PM.dane = p.pomysl;
+      rysujProfil();
+      otworzRezyserie(otwarte, $("#scenariuszPomyslu"));
+    },
+  });
   ustawPracePm(PM.pracuje);
 }
 // Kwestie do powiedzenia w materiale (teleprompter). Claude pisze [{kiedy, tekst}], tolerujemy też same napisy.
@@ -2677,15 +2750,19 @@ function promptMaterialow() {
   const P = S.projekt;
   return `Użyj skilla rolki-beauty (.claude/skills/rolki-beauty/SKILL.md) i zasad z CLAUDE.md.
 Projekt rolki: ${P.nazwa} (folder ${P.sciezka}). Scenariusz i lista materiałów: ${P.sciezka}/scenariusz.json (pole materialy[].pliki = wgrane pliki w raw/; pliki w raw/ nazywają się jak materialy[].nazwa_pliku, np. M1_mowa_hook.mp4, kolejne podejścia _2, _3; materialy[].teleprompter = co ${OS().mian} miała powiedzieć, porównaj z transkrypcją i wybierz najlepsze podejście). Brief: ${P.sciezka}/brief.md, montaż: ${P.sciezka}/kompozycja/rolka.json.
+${uwagaMontazu()}
+${kontekstOpcjiAI()}
 ${OS().mian} wgrała materiały do rolki, którą razem zaplanowałyście. Twoje zadanie:
 1. Sprawdź każdy wgrany plik (ffprobe: orientacja, długość; w razie potrzeby wyciągnij klatkę ffmpeg i obejrzyj ją): czy pasuje do opisu materiału, czy jest ostry i jasny. Krótko powiedz, co jest super, a co warto nagrać jeszcze raz.
 2. Uruchom npm run normalizuj -- ${P.nazwa} --cisza (jeśli proxy/ jest puste albo nieaktualne). Mowę dopasowuje skrypt: jeśli ${P.sciezka}/napisy/kwestie.json nie istnieje albo jest starszy niż nagrania z mową, uruchom npm run dopasuj-kwestie -- ${P.nazwa}. NIE zgaduj cięć mowy i NIE uruchamiaj zwykłego transkrybuj na nagraniach z kwestiami.
+   Dopasuj ujęcia do planu przez node scripts/dopasuj-ujecia.mjs "${P.sciezka}". Odczytaj kompozycja/dopasowania-ujec.json z projektu i sprawdź wskazane przedziały, zanim wybierzesz przebitki.
 3. Ułóż rolka.json według scenariusza: każda kwestia = ujęcie z kwestie.json -> kwestie[].wybrane (src = wybrane.plik, od = wybrane.od, do = wybrane.do, "dzwiek": true), w kolejności ze scenariusza; nie zmieniaj tych czasów (${OS().mian} mogła wybrać podejście ręcznie). Kwestia bez "wybrane" = powiedz ${OS().cel}, której brakuje. Gdy "wybrane" ma "segmenty", przepisz je do ujęcia ("segmenty": [[od, do], ...]): zloz wytnie „yyy” i pauzy i zamaskuje skoki zmianą kadru. Każde ujęcie z kwestią oznacz "kwestia": "M1.1". Napisy idą same z rolka.json -> napisy.zrodla (ustawia je dopasuj-kwestie, nie ruszaj).
    Montaż na poziomie eksperckim:
    - PRZEBITKI NAD GŁOSEM (L-cut): gdy kwestia mówi o czymś, co widać na innym materiale (zabieg, preparat, efekt), dodaj do ujęcia z kwestią "przebitki": [{"src": "proxy/M3_x.mp4", "od": 0, "start": sekunda od początku ujęcia, "czas": 1.2-2}]. Głos leci dalej, obraz pokazuje to, o czym mowa. Zwykle 1 przebitka na kwestię dłuższą niż 3 s, nigdy w pierwszej 1 s kwestii (widz ma zobaczyć twarz).
    - TEMPO: nudne przygotowanie zabiegu przyspiesz ("tempo": 2-3, ujęcie jest wtedy bez dźwięku), efekt i odsłonięcie zostaw w tempie 1.
    - OBRAZ: przeczytaj ${P.sciezka}/proxy/.obraz.json. Ujęć z uwagami „za ciemne”, „przepalone”, odcień nie dawaj na start ani na efekt końcowy; jeśli są kluczowe, powiedz ${OS().cel}, co nagrać jeszcze raz i jak (światło z okna, lampa).
-   Pozostałe ujęcia (b-roll) w czasach ze scenariusza (z proxy/), hook-tytul z wybranym hookiem od 0 s, plansze z na_ekranie, przed-po jeśli są zdjęcia przed/po, CTA na końcu, efekty z scenariusz.json -> efekty. Potem npm run zloz -- ${P.nazwa}.
+   - REŻYSERIA: odczytaj scenariusz[].rezyseria. Czasy w zdarzeniach są względem danej sceny. Kotwicz je do odpowiedniej kwestii po dopasowaniu i mikrocięciach, zgodnie z polem synchronizacja. Zrealizuj zatwierdzone elementy z dostępnym materiałem. Pozostałe są propozycjami do potwierdzenia. Gdy brakuje zdjęcia, nagrania lub źródła liczb, wskaż konkretną potrzebę. Komentarz jest rzeczywisty tylko wtedy, gdy ma powiązany zatwierdzony materiał typu komentarz z rzeczywistym źródłem. W pozostałych przypadkach umieść w kadrze podpis „Komentarze ilustracyjne”. Bez wygenerowanych reakcji sugerujących liczebność i bez fikcyjnej tożsamości.
+   Pozostałe ujęcia (b-roll) w czasach ze scenariusza (z proxy/), hook-tytul z wybranym hookiem od 0 s, plansze z na_ekranie, przed-po jeśli są zdjęcia przed/po, CTA na końcu. Użyj decyzji z rolka.json przed propozycjami ze scenariusza. Podsumuj, które techniki pasują i które pomijasz. Potem npm run zloz -- ${P.nazwa}.
 4. Jedno pytanie naraz, ostatnia linia: OPCJE: a | b | c. Najwyżej 4 pytania. Na koniec napisz, co zrobiłaś i co kliknąć dalej (wersja robocza w kroku Render), a w ostatniej linii: GOTOWE
 Nigdy nie zakładaj zgody na wizerunek klientki. Zero obietnic medycznych. Nie renderuj finalu.`;
 }

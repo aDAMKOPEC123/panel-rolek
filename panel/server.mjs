@@ -19,11 +19,20 @@ import { stanLicencji, maLicencje, aktywuj as aktywujLicencje, dezaktywuj as dez
 import { zapiszProfil, oznaczKreator, stanKreatora, sprawdzProgramy } from "./kreator.mjs";
 import { PLAN_DIR, plikPlanu, poniedzialek, okazje as okazjePlanu } from "../scripts/plan-tygodnia.mjs";
 import { PROPOZYCJE } from "../scripts/szybkie-pomysly.mjs";
-import { miesiac as miesiacKal, przenies as przeniesKal, dodajWlasny as dodajWlasnyKal, usunWpis as usunWpisKal, ustawWpis as ustawWpisKal, ics as icsKal, wszystkiePlany } from "../scripts/kalendarz.mjs";
+import { miesiac as miesiacKal, przenies as przeniesKal, dodajWlasny as dodajWlasnyKal, usunWpis as usunWpisKal, ustawWpis as ustawWpisKal, ics as icsKal, wszystkiePlany, zapiszTerminy, wpisZJakoscia, pobierzWpisPlanu, sprawdzWpisDoRecenzji, podpisWersjiWpisu, zapiszPoprawkeWpisu } from "../scripts/kalendarz.mjs";
+import { TYPY_PUBLIKACJI, CELE_PUBLIKACJI, czyRolka } from "../scripts/publikacje.mjs";
 import { zapiszJakoPomysl } from "../scripts/pomysly-ai.mjs";
 import { czytajPytania, dodajPytanie, usunPytanie, czytajGrafik, zapiszGrafik } from "../scripts/kontekst-rolek.mjs";
 import { stanIG, polacz as polaczIG, rozlacz as rozlaczIG, synchronizuj as synchronizujIG, przypisz as przypiszIG, rolkiIG } from "../scripts/instagram.mjs";
 import { listaStylow, wczytajStyl, zapiszStyl, nowyStyl, usunStyl, ustawDlaNowych, zapiszPlikStylu, stylZeStrony, zastosujStyl } from "../scripts/style-marki.mjs";
+import { STYLE_MONTAZU, stylMontazu } from "../scripts/style-montazu.mjs";
+import { TYPY_ZDARZEN, STATUSY_MATERIALOW, POCHODZENIE, WYTYCZNE_REZYSERII, normalizujRezyserie, porzadkujRezyserie } from "../scripts/rezyseria-montazu.mjs";
+import { zapiszDokumentRezyserii } from "../scripts/rezyseruj.mjs";
+import { podpisMontazuAutopilota, stanAudytuAutopilota } from "../scripts/audyt-autopilota.mjs";
+import { CHARAKTERY_MONTAZU, EFEKTY, NARZEDZIA_MONTAZU, dostepneNarzedzia, ograniczeniaEfektow } from "../scripts/opcje-montazu.mjs";
+import { kontekstAI, promptKontekstuAI, czytajPreferencjeAI, zapiszPreferencjeAI } from "../scripts/kontekst-ai.mjs";
+import { wczytajDopasowaniaUjec } from "../scripts/dopasuj-ujecia.mjs";
+import { pokazJakoscPublikacji } from "../scripts/jakosc-publikacji.mjs";
 
 globalThis.__ROLKI_RZUCAJ = true;
 const PORT = Number(process.env.PANEL_PORT || 4321);
@@ -176,7 +185,7 @@ function projektInfo(nazwa) {
   const wdir = path.join(p, "final", "warianty");
   pliki.warianty = listaPlikow(wdir).filter((n) => /\.mp4$/i.test(n)).map((n) => ({ nazwa: n, sciezka: rel(path.join(wdir, n)), ...meta(path.join(wdir, n)) }));
   let scenariusz = null;
-  try { scenariusz = JSON.parse(fs.readFileSync(path.join(p, "scenariusz.json"), "utf8")); } catch {}
+  scenariusz = pokazDokumentScenariusza(czytajJson(path.join(p, "scenariusz.json"), null));
   const obraz = czytajJson(path.join(p, "proxy", ".obraz.json"), {});
   const kontrolaHooka = czytajJson(path.join(p, "kompozycja", "hook.json"), null);
   const wyniki = czytajJson(path.join(p, "final", "wyniki.json"), null);
@@ -185,7 +194,9 @@ function projektInfo(nazwa) {
   const kontrolaObrazu = czytajJson(path.join(p, "kompozycja", "kontrola-obrazu.json"), null);
   let skladniki = null;
   try { skladniki = czytajJson(path.join(p, "final", "skladniki.json"), null) || skladnikiRolki(p); } catch {}
-  return { nazwa, sciezka: rel(p), pola, sekcje: sekcje(txt), rolka, rolkaZmiana, pliki, zrodloNapisow: zrodlo, scenariusz, obraz, kontrolaHooka, wyniki, skladniki, vlog, rozpoznanie, kontrolaObrazu };
+  const audytAutopilota = stanAudytuAutopilota(p);
+  const dopasowaniaUjec = wczytajDopasowaniaUjec(p, scenariusz);
+  return { nazwa, sciezka: rel(p), pola, sekcje: sekcje(txt), rolka, rolkaZmiana, pliki, zrodloNapisow: zrodlo, scenariusz, obraz, kontrolaHooka, wyniki, skladniki, vlog, rozpoznanie, kontrolaObrazu, audytAutopilota, dopasowaniaUjec };
 }
 
 // ---------- szablony, formaty, hooki, checklista ----------
@@ -258,35 +269,53 @@ function noweZadanie(opis, cmd, args, opts = {}) {
   const id = crypto.randomUUID().slice(0, 8);
   const z = { id, opis, projekt: opts.projekt || null, start: Date.now(), linie: [], postep: null, koniec: false, kod: null, sluchacze: new Set(), wynik: "" };
   zadania.set(id, z);
-  const ch = spawn(cmd, args, { cwd: ROOT, env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1" }, windowsHide: true, shell: opts.shell || false });
-  z.proc = ch;
-  if (opts.stdin != null) { ch.stdin.write(opts.stdin); ch.stdin.end(); }
   const emit = (ev) => { for (const s of z.sluchacze) s.write(`data: ${JSON.stringify(ev)}\n\n`); };
-  let bufor = "";
-  const linia = (raw) => {
+  const linia = (raw, parser) => {
     const t = czysc(raw).trimEnd();
     if (!t) return;
     const proc = t.match(/(\d{1,3})%/);
     if (proc) { z.postep = Math.min(100, Number(proc[1])); emit({ postep: z.postep }); if (/█|░|▏|Rendering|Capturing/i.test(t) && z.linie.length && /(\d{1,3})%/.test(z.linie[z.linie.length - 1])) { z.linie[z.linie.length - 1] = t; emit({ zamien: t }); return; } }
-    if (opts.parser) { const p = opts.parser(t, z); if (p === null) return; }
+    if (parser?.(t, z) === null) return;
     z.linie.push(t);
     if (z.linie.length > 2000) z.linie.shift();
     emit({ linia: t });
   };
-  const dane = (d) => {
-    bufor += d.toString("utf8");
-    const czesci = bufor.split(/\r?\n|\r/);
-    bufor = czesci.pop();
-    czesci.forEach(linia);
-  };
-  ch.stdout.on("data", dane);
-  ch.stderr.on("data", dane);
-  ch.on("error", (e) => { linia("✗ BŁĄD: " + e.message); });
-  ch.on("close", (kod) => {
-    if (bufor) linia(bufor);
+  const koniec = (kod) => {
     z.koniec = true; z.kod = kod; z.czasKonca = Date.now();
-    emit({ koniec: true, kod, wynik: z.wynik, sesja: z.sesja });
+    emit({ koniec: true, kod, wynik: z.wynik, sesja: z.sesja, audyt: z.audyt });
     for (const s of z.sluchacze) s.end();
+  };
+  const etap = (exe, parametry, { parser, stdin, shell }, po) => {
+    const ch = spawn(exe, parametry, { cwd: ROOT, env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1" }, windowsHide: true, shell: !!shell });
+    z.proc = ch;
+    if (stdin != null) {
+      ch.stdin.on("error", () => {});
+      ch.stdin.end(stdin);
+    }
+    const bufory = [ch.stdout, ch.stderr].map((strumien) => {
+      let bufor = "";
+      strumien.setEncoding("utf8");
+      strumien.on("data", (d) => {
+        const czesci = (bufor + d).split(/\r?\n|\r/);
+        bufor = czesci.pop();
+        czesci.forEach((l) => linia(l, parser));
+      });
+      return () => { if (bufor) linia(bufor, parser); };
+    });
+    ch.on("error", (e) => { linia("✗ BŁĄD: " + e.message); });
+    ch.on("close", (kod) => { bufory.forEach((spusc) => spusc()); po(kod); });
+  };
+  etap(cmd, args, opts, (kod) => {
+    if (z.bladClaude && kod === 0) kod = 1;
+    try {
+      const kontynuacja = kod === 0 && !z.przerwano && opts.kontynuuj?.(z);
+      if (!kontynuacja) return koniec(kod);
+      linia("Autopilot sprawdza montaż i porównuje poprawki…");
+      etap(process.execPath, [path.join(ROOT, "scripts", "audyt-autopilota.mjs"), kontynuacja], {}, (wynik) => {
+        z.audyt = stanAudytuAutopilota(kontynuacja);
+        koniec(wynik);
+      });
+    } catch (e) { linia("✗ BŁĄD: " + e.message); koniec(1); }
   });
   return z;
 }
@@ -296,6 +325,24 @@ function uruchomSkrypt(skrypt, args, projekt) {
   return noweZadanie(`${skrypt} ${args.join(" ")}`, process.execPath, [path.join(ROOT, "scripts", `${skrypt}.mjs`), ...args], { projekt });
 }
 const zadanieJson = (z) => ({ id: z.id, opis: z.opis, projekt: z.projekt, start: z.start, koniec: z.koniec, kod: z.kod, postep: z.postep, linie: z.linie.slice(-400) });
+
+function odczytajPodglad(linia, zadanie) {
+  if (!linia.startsWith("POPRAWKA ")) return;
+  zadanie.wynik = linia.slice("POPRAWKA ".length);
+  return null;
+}
+const konflikt = (tekst) => Object.assign(new Error(tekst), { status: 409 });
+
+function notatkaPreferencji(tresc) {
+  if (typeof tresc !== "string" || !tresc.trim() || tresc.length > 240) throw blad400("Podaj zasadę w maksymalnie 240 znakach.");
+  return { klucz: crypto.randomUUID(), tresc: tresc.trim() };
+}
+
+function preferencjaPoprawki(b) {
+  if (!b.zapamietaj) return null;
+  if (!["marka", "projekt"].includes(b.zapamietaj)) throw blad400("Wybierz zakres zapisu preferencji.");
+  return notatkaPreferencji(b.zasada);
+}
 
 // ---------- Claude ----------
 let claudeBin = null;
@@ -307,7 +354,7 @@ function claudeDostepny() {
   return claudeBin;
 }
 // sesja: id rozmowy z poprzedniej odpowiedzi (asystent z pytaniami) -> --resume, Claude pamięta rozmowę.
-function claudeZadanie(prompt, projekt, sesja) {
+function claudeZadanie(prompt, projekt, sesja, autopilot = null) {
   const bin = claudeDostepny();
   if (!bin) throw blad400("Komenda claude nie jest zainstalowana. Użyj „Kopiuj prompt”.");
   const args = ["-p", "--output-format", "stream-json", "--verbose", "--permission-mode", "acceptEdits",
@@ -316,6 +363,15 @@ function claudeZadanie(prompt, projekt, sesja) {
   if (sesja) args.unshift("--resume", sesja);
   return noweZadanie("Claude", bin, args, {
     projekt, stdin: prompt, shell: /\.cmd$/i.test(bin),
+    kontynuuj(z) {
+      if (!autopilot || !z.wynik) return null;
+      const ostatnia = z.wynik.trim().split(/\r?\n/).at(-1);
+      if (/^MONTA[ŻZ] DO KONTROLI\s*\.?$/i.test(ostatnia)) return autopilot.proj;
+      // Starsze sesje proszą o final po wygenerowaniu wersji roboczej.
+      const koniecMontazu = /^(GOTOWE\s*\.?|OPCJE\s*:.*\b(robimy final|finalizuj|zrób final)\b.*)$/i.test(ostatnia);
+      if (koniecMontazu && autopilot.podpis !== podpisMontazuAutopilota(autopilot.proj)) return autopilot.proj;
+      return null;
+    },
     parser: (t, z) => {
       let j;
       try { j = JSON.parse(t); } catch { return t; }
@@ -328,6 +384,7 @@ function claudeZadanie(prompt, projekt, sesja) {
         }
       } else if (j.type === "result") {
         z.wynik = j.result || "";
+        z.bladClaude = j.is_error === true;
         pokaz.push(j.is_error ? "✗ Claude zakończył z błędem." : "✓ Claude skończył.");
       }
       for (const l of pokaz.join("\n").split("\n")) { z.linie.push(l); for (const s of z.sluchacze) s.write(`data: ${JSON.stringify({ linia: l })}\n\n`); }
@@ -353,6 +410,9 @@ function pomyslDir(id) {
 }
 const czytajJson = (p, dom) => { try { return JSON.parse(fs.readFileSync(p, "utf8")); } catch { return dom; } };
 const piszJson = (p, d) => fs.writeFileSync(p, JSON.stringify(d, null, 2) + "\n", "utf8");
+function pokazDokumentScenariusza(P) {
+  return Array.isArray(P?.scenariusz) ? { ...P, scenariusz: porzadkujRezyserie(P.scenariusz) } : P;
+}
 function pomysly() {
   if (!fs.existsSync(POMYSLY)) return [];
   return fs.readdirSync(POMYSLY).filter((n) => fs.existsSync(path.join(POMYSLY, n, "pomysl.json"))).sort().reverse().map((n) => {
@@ -362,7 +422,7 @@ function pomysly() {
 }
 function pomyslInfo(id) {
   const d = pomyslDir(id);
-  return { id, sciezka: rel(path.join(d, "pomysl.json")), pomysl: czytajJson(path.join(d, "pomysl.json"), null), rozmowa: czytajJson(path.join(d, "rozmowa.json"), { sesja: null, wiadomosci: [] }), recenzja: czytajJson(path.join(d, "recenzja.json"), null), turniej: czytajJson(path.join(d, "turniej.json"), null), historia: czytajJson(path.join(d, "historia.json"), null) };
+  return { id, sciezka: rel(path.join(d, "pomysl.json")), pomysl: pokazDokumentScenariusza(czytajJson(path.join(d, "pomysl.json"), null)), rozmowa: czytajJson(path.join(d, "rozmowa.json"), { sesja: null, wiadomosci: [] }), recenzja: czytajJson(path.join(d, "recenzja.json"), null), turniej: czytajJson(path.join(d, "turniej.json"), null), historia: czytajJson(path.join(d, "historia.json"), null) };
 }
 // Zapis wgranego pliku strumieniem (duże wideo z telefonu).
 async function zapiszStrumien(req, cel) {
@@ -388,7 +448,7 @@ function tabelaScenariusza(sc) {
 }
 function utworzZPomyslu(id) {
   const d = pomyslDir(id);
-  const P = czytajJson(path.join(d, "pomysl.json"), null);
+  const P = pokazDokumentScenariusza(czytajJson(path.join(d, "pomysl.json"), null));
   if (!P) throw blad400("Pomysł nie ma jeszcze pliku pomysl.json.");
   const pr = P.profil || {};
   const kat = String(pr.kategoria || "").toLowerCase().replace(/ę/g, "e").replace(/[^a-z]/g, "");
@@ -454,7 +514,10 @@ trasa("GET", /^\/api\/start$/, () => {
   const licencja = stanLicencji();
   if (!licencja.aktywna) return { licencja };
   const cfg = wczytajConfig();
-  return { licencja, config: { kolory: cfg.kolory, fonty: cfg.fonty, gabinet: cfg.gabinet, napisy: cfg.napisy, cta: cfg.cta, rolka: cfg.rolka, ruch: cfg.ruch }, kategorie: KATEGORIE, claude: !!claudeDostepny(), kreator: stanKreatora() };
+  const styleMontazu = STYLE_MONTAZU.map(({ id, nazwa, opis, kadr, wskazowka }) => ({ id, nazwa, opis, kadr, wskazowka }));
+  const rezyseria = { typy: TYPY_ZDARZEN, statusy: STATUSY_MATERIALOW, pochodzenie: POCHODZENIE, prompt: WYTYCZNE_REZYSERII };
+  const opcjeMontazu = { efekty: EFEKTY, narzedzia: NARZEDZIA_MONTAZU };
+  return { licencja, config: { kolory: cfg.kolory, fonty: cfg.fonty, gabinet: cfg.gabinet, napisy: cfg.napisy, cta: cfg.cta, rolka: cfg.rolka, ruch: cfg.ruch }, kategorie: KATEGORIE, claude: !!claudeDostepny(), kreator: stanKreatora(), styleMontazu, rezyseria, opcjeMontazu, publikacje: { formaty: TYPY_PUBLIKACJI, cele: CELE_PUBLIKACJI } };
 });
 // Profil gabinetu (scripts/gabinet.mjs): wywiad w kreatorze i odczyt strony www przez Claude
 trasa("GET", /^\/api\/gabinet$/, () => ({ profil: czytajProfilGab(), jest: maProfilGab() }));
@@ -510,8 +573,31 @@ trasa("PUT", /^\/api\/projekt\/([^/]+)\/rolka$/, async (m, req) => {
   const b = await body(req);
   if (!b || typeof b !== "object" || !Array.isArray(b.ujecia)) throw blad400("rolka.json musi mieć tablicę ujecia.");
   fs.mkdirSync(path.join(p, "kompozycja"), { recursive: true });
-  fs.writeFileSync(path.join(p, "kompozycja", "rolka.json"), JSON.stringify(b, null, 2) + "\n", "utf8");
-  return { ok: true };
+  const plik = path.join(p, "kompozycja", "rolka.json");
+  fs.writeFileSync(plik, JSON.stringify(b, null, 2) + "\n", "utf8");
+  return { ok: true, zmiana: fs.statSync(plik).mtime.toISOString() };
+});
+trasa("POST", /^\/api\/projekt\/([^/]+)\/szukaj-ujec$/, async (m, req) => {
+  const nazwa = decodeURIComponent(m[1]);
+  projektDir(nazwa);
+  const b = await body(req);
+  const tekst = typeof b?.tekst === "string" ? b.tekst.trim() : "";
+  if (tekst.length < 2 || tekst.length > 250 || tekst.includes("\0")) throw blad400("Wpisz opis od 2 do 250 znaków.");
+  if ([...zadania.values()].some((z) => z.szukajUjec && !z.koniec)) {
+    throw Object.assign(new Error("Wyszukiwanie już trwa. Spróbuj po jego zakończeniu."), { status: 409 });
+  }
+  const z = noweZadanie("Wyszukiwanie fragmentów", process.execPath, [
+    path.join(ROOT, "scripts", "szukaj-ujec.mjs"), nazwa, `--tekst=${tekst}`,
+  ], {
+    projekt: nazwa,
+    parser(linia, zadanie) {
+      if (!linia.startsWith("WYNIKI ")) return;
+      zadanie.wynik = linia.slice("WYNIKI ".length);
+      return null;
+    },
+  });
+  z.szukajUjec = true;
+  return zadanieJson(z);
 });
 // ?plik=slowa/M1_x.json: słowa jednego nagrania (napisy z kilku plików), inaczej napisy/transcript.json
 const plikNapisow = (p, url) => { const q = url?.searchParams.get("plik"); if (q && !/^slowa\/[\w.-]+\.json$/.test(q)) throw blad400("Zły plik napisów."); return path.join(p, "napisy", q || "transcript.json"); };
@@ -553,6 +639,70 @@ trasa("POST", /^\/api\/pomysly$/, async (m, req) => {
   return pomyslInfo(id);
 });
 trasa("GET", /^\/api\/pomysl\/([\w-]+)$/, (m) => pomyslInfo(m[1]));
+function plikRezyserii(rodzaj, id) {
+  const d = rodzaj === "pomysl" ? pomyslDir(id) : projektDir(id);
+  return path.join(d, rodzaj === "pomysl" ? "pomysl.json" : "scenariusz.json");
+}
+function briefZProjektu(projekt, dokument, rolka, pola) {
+  dokument ??= czytajJson(path.join(projekt, "scenariusz.json"), null);
+  rolka ??= czytajJson(path.join(projekt, "kompozycja", "rolka.json"), null);
+  const audyt = stanAudytuAutopilota(projekt);
+  const uwagi = audyt?.aktualny ? [...(audyt.recenzja?.uwagi || []), ...(audyt.obraz?.problemy || [])] : [];
+  return kontekstAI({ projekt, dokument, rolka, pola, uwagi, dopasowanie: wczytajDopasowaniaUjec(projekt, dokument) });
+}
+
+trasa("GET", /^\/api\/brief-ai$/, (m, req, url) => {
+  const nazwa = url.searchParams.get("projekt"), id = url.searchParams.get("pomysl");
+  const projekt = nazwa ? projektDir(nazwa) : null;
+  const katalog = id && !projekt ? pomyslDir(id) : null;
+  const brief = projekt ? briefZProjektu(projekt) : kontekstAI({ katalog, dokument: katalog ? czytajJson(path.join(katalog, "pomysl.json"), null) : null });
+  return { brief, tekst: promptKontekstuAI(brief), pamiec: { marka: czytajPreferencjeAI(), projekt: projekt ? czytajPreferencjeAI(projekt) : [] } };
+});
+trasa("POST", /^\/api\/preferencje-ai$/, async (m, req) => {
+  const b = await body(req);
+  if (!["marka", "projekt"].includes(b?.zakres)) throw blad400("Wybierz zakres preferencji.");
+  const katalog = b.zakres === "projekt" ? projektDir(b.projekt) : null;
+  if (b.usun && !czytajPreferencjeAI(katalog).some((p) => p.klucz === b.usun)) throw blad400("Nie ma takiej preferencji.");
+  const pozycja = b.usun ? { klucz: b.usun, tresc: "" } : notatkaPreferencji(b.tresc);
+  return { preferencje: zapiszPreferencjeAI(katalog, [pozycja]) };
+});
+trasa("POST", /^\/api\/projekt\/([^/]+)\/dopasuj-ujecia$/, (m) => {
+  const nazwa = decodeURIComponent(m[1]), projekt = projektDir(nazwa), plik = path.join(projekt, "scenariusz.json");
+  if (!czytajJson(plik, null)?.scenariusz?.length) throw blad400("Najpierw zapisz scenariusz.");
+  if ([...zadania.values()].some((z) => z.rezyseria === plik && !z.koniec)) throw konflikt("Reżyseria lub dopasowanie już trwa.");
+  const z = noweZadanie("Dopasowanie ujęć do scen", process.execPath, [path.join(ROOT, "scripts", "dopasuj-ujecia.mjs"), projekt, "--odswiez"], { projekt: nazwa });
+  z.rezyseria = plik;
+  return zadanieJson(z);
+});
+trasa("PUT", /^\/api\/(pomysl|projekt)\/([^/]+)\/rezyseria\/(\d+)$/, async (m, req) => {
+  const plik = plikRezyserii(m[1], decodeURIComponent(m[2]));
+  const b = await body(req);
+  const P = czytajJson(plik, null);
+  const i = Number(m[3]), scena = P?.scenariusz?.[i];
+  if (!scena) throw blad400("Nie ma takiej sceny.");
+  if (b?.wersja !== JSON.stringify(porzadkujRezyserie([scena])[0])) {
+    throw Object.assign(new Error("Scena się zmieniła. Odśwież ją przed zapisem."), { status: 409 });
+  }
+  let rezyseria;
+  try { rezyseria = normalizujRezyserie(b.rezyseria, scena); }
+  catch (e) { throw blad400(e.message); }
+  P.scenariusz[i] = { ...scena, rezyseria };
+  zapiszDokumentRezyserii(plik, P);
+  return { scena: P.scenariusz[i] };
+});
+trasa("POST", /^\/api\/(pomysl|projekt)\/([^/]+)\/rezyseria$/, async (m, req) => {
+  const id = decodeURIComponent(m[2]);
+  const plik = plikRezyserii(m[1], id);
+  const { zakres } = (await body(req)) || {};
+  if (!["braki", "wszystko"].includes(zakres) && !(Number.isSafeInteger(zakres) && zakres >= 0)) throw blad400("Wybierz scenę lub zakres regeneracji.");
+  if (!Array.isArray(czytajJson(plik, null)?.scenariusz)) throw blad400("Najpierw zapisz scenariusz.");
+  if ([...zadania.values()].some((z) => z.rezyseria === plik && !z.koniec)) {
+    throw Object.assign(new Error("Reżyseria tego scenariusza już się generuje."), { status: 409 });
+  }
+  const z = noweZadanie("Reżyseria montażu", process.execPath, [path.join(ROOT, "scripts", "rezyseruj.mjs"), plik, String(zakres)], { projekt: m[1] === "projekt" ? id : null });
+  z.rezyseria = plik;
+  return zadanieJson(z);
+});
 trasa("PUT", /^\/api\/pomysl\/([\w-]+)$/, async (m, req) => {
   const d = pomyslDir(m[1]);
   const b = await body(req);
@@ -671,8 +821,43 @@ trasa("POST", /^\/api\/instagram\/przypisz$/, async (m, req) => { const b = awai
 trasa("GET", /^\/api\/kalendarz$/, (m, req, url) => miesiacKal(url.searchParams.get("m")));
 trasa("POST", /^\/api\/kalendarz\/przenies$/, async (m, req) => { const b = await body(req); try { return przeniesKal(b.id, b.data); } catch (e) { throw blad400(e.message); } });
 trasa("POST", /^\/api\/kalendarz\/dodaj$/, async (m, req) => { try { return dodajWlasnyKal(await body(req)); } catch (e) { throw blad400(e.message); } });
+trasa("POST", /^\/api\/kalendarz\/terminy$/, async (m, req) => { try { return zapiszTerminy(await body(req)); } catch (e) { throw blad400(e.message); } });
 trasa("PUT", /^\/api\/kalendarz\/wpis\/(\w+)$/, async (m, req) => { try { return ustawWpisKal(m[1], await body(req)); } catch (e) { throw blad400(e.message); } });
 trasa("DELETE", /^\/api\/kalendarz\/wpis\/(\w+)$/, (m) => { try { return usunWpisKal(m[1]); } catch (e) { throw blad400(e.message); } });
+trasa("POST", /^\/api\/kalendarz\/wpis\/(\w+)\/recenzja$/, (m) => {
+  const id = m[1];
+  try { sprawdzWpisDoRecenzji(id); } catch (e) { throw blad400(e.message); }
+  const aktywne = [...zadania.values()].find((z) => z.recenzjaPublikacji === id && !z.koniec);
+  if (aktywne) return zadanieJson(aktywne);
+  const z = noweZadanie("Recenzja planu publikacji", process.execPath, [path.join(ROOT, "scripts", "recenzja-publikacji.mjs"), id]);
+  z.recenzjaPublikacji = id;
+  return zadanieJson(z);
+});
+trasa("POST", /^\/api\/kalendarz\/wpis\/(\w+)\/poprawka$/, async (m, req) => {
+  const id = m[1], { zrodlo, numer } = (await body(req)) || {};
+  let wpis;
+  try { wpis = pobierzWpisPlanu(id); } catch (e) { throw blad400(e.message); }
+  const raport = pokazJakoscPublikacji(wpis);
+  const uwagi = zrodlo === "ai" ? raport?.recenzja?.ai?.uwagi : zrodlo === "lokalne" ? raport?.lokalne : null;
+  const uwaga = Number.isSafeInteger(numer) && uwagi?.[numer];
+  if (!uwaga?.element || !wpis.plan_tresci?.[uwaga.element - 1]) throw blad400("Wybierz aktualną uwagę do elementu rozpiski.");
+  if ([...zadania.values()].some((z) => z.poprawka?.id === id && !z.koniec)) throw konflikt("Claude już przygotowuje zmianę tego wpisu.");
+  const z = noweZadanie("Poprawka publikacji", process.execPath, [path.join(ROOT, "scripts", "recenzja-publikacji.mjs"), "--poprawka"], {
+    stdin: JSON.stringify({ wpis, uwaga }), parser: odczytajPodglad,
+  });
+  z.poprawka = { rodzaj: "publikacja", id, podpis: podpisWersjiWpisu(wpis), element: uwaga.element };
+  return zadanieJson(z);
+});
+trasa("PUT", /^\/api\/kalendarz\/wpis\/(\w+)\/poprawka$/, async (m, req) => {
+  const b = await body(req), z = zadania.get(b?.zadanie), id = m[1];
+  if (z?.kod !== 0 || z.poprawka?.rodzaj !== "publikacja" || z.poprawka.id !== id || !z.wynik) throw blad400("Otwórz aktualną propozycję poprawki.");
+  const { podpis, element } = z.poprawka;
+  const preferencja = preferencjaPoprawki(b);
+  const wynik = zapiszPoprawkeWpisu(id, { podpis, element, po: JSON.parse(z.wynik).po, preferencja: b.zapamietaj === "projekt" ? preferencja : null });
+  if (b.zapamietaj === "marka") zapiszPreferencjeAI(null, [preferencja]);
+  z.poprawka = null;
+  return wynik;
+});
 trasa("GET", /^\/api\/kalendarz\.ics$/, () => ({ __plik: { typ: "text/calendar; charset=utf-8", nazwa: "rolki.ics", tresc: icsKal().tresc } }));
 // Plan rolek na tydzień (scripts/plan-tygodnia.mjs): GET ?od=RRRR-MM-DD (poniedziałek, domyślnie ten tydzień), układanie przez /api/uruchom
 const isoDnia = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -693,12 +878,13 @@ trasa("GET", /^\/api\/plan$/, (m, req, url) => {
       else if (d.stan !== "opublikowana" && listaPlikow(path.join(p, "final"), /\.mp4$/i).length) d.stan = "gotowa";
     }
   }
+  if (plan) plan.dni = plan.dni.map(wpisZJakoscia);
   const tygodnie = fs.existsSync(PLAN_DIR) ? fs.readdirSync(PLAN_DIR).filter((n) => /^\d{4}-\d{2}-\d{2}\.json$/.test(n)).map((n) => n.slice(0, 10)).sort() : [];
   return { od, dzis: isoDnia(new Date()), plan, tygodnie, okazje: plan ? null : okazjePlanu(new Date(od + "T12:00"), 13), gabinet: maProfilGab() };
 });
 trasa("PUT", /^\/api\/plan\/(\d{4}-\d{2}-\d{2})\/dzien\/(\d{4}-\d{2}-\d{2})$/, async (m, req) => {
   const plan = czytajJson(plikPlanu(m[1]), null);
-  const d = plan?.dni.find((x) => x.data === m[2]);
+  const d = plan?.dni.find((x) => x.data === m[2] && czyRolka(x));
   if (!d) throw blad400("Nie ma takiego dnia w planie.");
   const b = await body(req);
   if (b.stan && !["plan", "scenariusz", "nagrane", "gotowa", "opublikowana", "pominieta"].includes(b.stan)) throw blad400("Zły stan.");
@@ -804,6 +990,17 @@ trasa("POST", /^\/api\/projekt\/([^/]+)\/zloz$/, (m) => {
   if (r.status !== 0) throw blad400(log.split("\n").filter((l) => /BŁĄD|Co zrobić/.test(l)).join(" ") || log.slice(-400) || "Składanie się nie udało.");
   return { ok: true, log };
 });
+trasa("POST", /^\/api\/projekt\/([^/]+)\/podglad-stylu$/, async (m, req) => {
+  const nazwa = decodeURIComponent(m[1]);
+  const projekt = projektDir(nazwa);
+  const preset = stylMontazu((await body(req))?.styl);
+  if (!preset) throw blad400("Nieznany styl montażu.");
+  const aktywne = [...zadania.values()].find((z) => !z.koniec && z.projekt === nazwa && z.podgladStylu === preset.id);
+  const z = aktywne || noweZadanie(`Podgląd stylu · ${preset.nazwa}`, process.execPath,
+    [path.join(ROOT, "scripts", "zloz.mjs"), projekt, `--podglad-stylu=${preset.id}`], { projekt: nazwa });
+  z.podgladStylu = preset.id;
+  return { ...zadanieJson(z), src: `/komp/${encodeURIComponent(nazwa)}/.podglady-stylow/${preset.id}/index.html` };
+});
 // Biblioteka Lottie (03_BIBLIOTEKA/lottie): lista i wgrywanie .json albo .lottie (dotLottie = zip -> JSON z wklejonymi obrazkami)
 const LOTTIE_DIR = path.join(ROOT, "03_BIBLIOTEKA", "lottie");
 trasa("GET", /^\/api\/lottie$/, () => (fs.existsSync(LOTTIE_DIR) ? fs.readdirSync(LOTTIE_DIR).filter((n) => /\.json$/i.test(n)).sort() : []).map((n) => ({ nazwa: n, sciezka: `03_BIBLIOTEKA/lottie/${n}` })));
@@ -853,17 +1050,169 @@ trasa("POST", /^\/api\/uruchom$/, async (m, req) => {
   const b = await body(req);
   return zadanieJson(uruchomSkrypt(b.skrypt, b.args || [], b.projekt));
 });
+
+function podpisMontazu(p) {
+  const hash = crypto.createHash("sha256");
+  for (const plik of ["brief.md", "scenariusz.json", "kompozycja/rolka.json"]) {
+    hash.update(plik);
+    const sciezka = path.join(p, plik);
+    if (fs.existsSync(sciezka)) hash.update(fs.readFileSync(sciezka));
+  }
+  return hash.digest("hex");
+}
+
+trasa("POST", /^\/api\/(projekt|pomysl)\/([^/]+)\/dobierz-montaz$/, async (m, req) => {
+  const nazwa = decodeURIComponent(m[2]), projekt = m[1] === "projekt";
+  const p = projekt ? projektDir(nazwa) : pomyslDir(nazwa);
+  const { wskazowka = "" } = (await body(req)) || {};
+  if (typeof wskazowka !== "string" || wskazowka.length > 450) throw blad400("Wskazówka może mieć maksymalnie 450 znaków.");
+  if (!claudeDostepny()) throw blad400("Dobieranie montażu wymaga Claude Code.");
+  const klucz = m[1] + ":" + nazwa;
+  if ([...zadania.values()].some((z) => z.dobor?.klucz === klucz && !z.koniec)) {
+    throw Object.assign(new Error("Dobieranie montażu dla tej rolki już trwa."), { status: 409 });
+  }
+  const wersja = projekt ? podpisMontazu(p) : null;
+  const P = projekt ? projektInfo(nazwa) : { pola: {}, pliki: { raw: [], proxy: [] }, scenariusz: pomyslInfo(nazwa).pomysl };
+  if (!projekt && !P.scenariusz?.scenariusz?.length) throw blad400("Najpierw przygotuj scenariusz.");
+  const r = P.rolka || {};
+  const obecnyStyl = CHARAKTERY_MONTAZU.some((s) => s.id === r.montaz) ? r.montaz : "reklamowy";
+  const ograniczenia = Object.fromEntries(CHARAKTERY_MONTAZU.map(({ id }) => [id, ograniczeniaEfektow(r, id)]));
+  const konfiguracja = Object.fromEntries(EFEKTY.map(([id, domyslnie]) => [id, r.efekty?.[id] ?? domyslnie]));
+  const narzedzia = dostepneNarzedzia(P);
+  const opisPliku = (f) => ({ nazwa: f.nazwa, czas: f.czas, typ: f.typ });
+  const kontekst = {
+    wskazowka: wskazowka.trim(),
+    brief: projekt ? briefZProjektu(p, P.scenariusz, r, P.pola) : kontekstAI({ katalog: p, dokument: P.scenariusz }),
+    temat: P.pola["tytuł roboczy"], cel: P.pola.cel,
+    wizerunek: P.pola["zgoda na wizerunek"],
+    profil: P.scenariusz?.profil,
+    scenariusz: P.scenariusz?.scenariusz?.map((s) => {
+      if (!s) return null;
+      const { od, do: koniec, mowisz, co_widac, rezyseria } = s;
+      return { od, koniec, mowisz, co_widac, zdarzenia: rezyseria?.zdarzenia.map(({ od, typ, opis, stan }) => ({ od, typ, opis, stan })) };
+    }),
+    pliki: { raw: P.pliki.raw.slice(0, 40).map(opisPliku), proxy: P.pliki.proxy.slice(0, 40).map(opisPliku) },
+    rozpoznanie: P.rozpoznanie?.pliki?.slice?.(0, 24),
+    montaz: { format: r.format, ruch: r.ruch, napisy: r.napisy?.styl, muzyka: !!r.muzyka?.src, ujecia: r.ujecia?.length || 0 },
+    obecnyStyl, konfiguracja, ograniczenia, narzedzia,
+    style: CHARAKTERY_MONTAZU.map(({ id, nazwa, opis, wskazowka }) => ({ id, nazwa, opis, wskazowka })),
+    efekty: EFEKTY.map(([id, , , nazwa, opis]) => ({ id, nazwa, opis })),
+    formaty: formaty().map(({ nr, tytul }) => ({ nr, tytul })),
+    szablony: szablony().map(({ id, tytul }) => ({ id, tytul })),
+  };
+  const z = noweZadanie("Dobór montażu", process.execPath, [path.join(ROOT, "scripts", "dobierz-montaz.mjs")], {
+    projekt: projekt ? nazwa : null, stdin: JSON.stringify(kontekst),
+    parser(linia, zadanie) {
+      if (!linia.startsWith("ZALECENIA ")) return;
+      const propozycja = JSON.parse(Buffer.from(linia.slice("ZALECENIA ".length), "base64").toString("utf8"));
+      zadanie.dobor.propozycja = propozycja;
+      zadanie.wynik = JSON.stringify({ propozycja, obecnyStyl, konfiguracja, ograniczenia });
+      return null;
+    },
+  });
+  z.dobor = { wersja, klucz, propozycja: null };
+  return zadanieJson(z);
+});
+
+trasa("PUT", /^\/api\/projekt\/([^/]+)\/dobierz-montaz$/, async (m, req) => {
+  const nazwa = decodeURIComponent(m[1]), p = projektDir(nazwa);
+  const { zadanie, styl, efekty, zapamietaj = "" } = (await body(req)) || {};
+  const z = zadania.get(zadanie);
+  const propozycja = z?.dobor?.propozycja;
+  if (z?.projekt !== nazwa || z.kod !== 0 || !propozycja) throw blad400("Otwórz aktualny dobór dla tej rolki.");
+  if (z.dobor.wersja !== podpisMontazu(p)) {
+    throw Object.assign(new Error("Rolka się zmieniła. Dobierz montaż ponownie."), { status: 409 });
+  }
+  if (typeof styl !== "boolean" || !Array.isArray(efekty) || new Set(efekty).size !== efekty.length
+      || efekty.some((id) => !propozycja.efekty.some((e) => e.id === id))) throw blad400("Wybierz ustawienia z rekomendacji.");
+  if (!["", "marka", "projekt"].includes(zapamietaj)) throw blad400("Wybierz zakres preferencji.");
+  const plik = path.join(p, "kompozycja", "rolka.json");
+  const r = czytajJson(plik, null);
+  if (!r || !Array.isArray(r.ujecia)) throw blad400("Projekt nie ma gotowego pliku montażu.");
+  if (styl && propozycja.montaz.id !== "obecny") r.montaz = propozycja.montaz.id;
+  const ograniczenia = ograniczeniaEfektow(r, r.montaz);
+  const wybrane = propozycja.efekty.filter((e) => efekty.includes(e.id));
+  if (wybrane.some(({ id, uzyj }) => Object.hasOwn(ograniczenia, id) && ograniczenia[id] !== uzyj)) {
+    throw blad400("Co najmniej jeden wybrany efekt koliduje z tym stylem montażu.");
+  }
+  r.efekty = { ...r.efekty, ...Object.fromEntries(wybrane.map(({ id, uzyj }) => [id, uzyj])) };
+  zapiszDokumentRezyserii(plik, r);
+  if (zapamietaj) {
+    const zapisy = wybrane.map(({ id, uzyj }) => ({ klucz: `efekt:${id}`, tresc: `Efekt ${EFEKTY.find(([e]) => e === id)?.[3] || id} (${id}) domyślnie ${uzyj ? "włączony" : "wyłączony"}.` }));
+    if (styl) zapisy.push({ klucz: "styl-montazu", tresc: `Preferowany styl montażu: ${r.montaz || "reklamowy"}.` });
+    if (zapisy.length) zapiszPreferencjeAI(zapamietaj === "projekt" ? p : null, zapisy);
+  }
+  return { ok: true };
+});
+
 trasa("POST", /^\/api\/claude$/, async (m, req) => {
   const b = await body(req);
   if (!b.prompt || String(b.prompt).length > 20000) throw blad400("Pusty albo za długi prompt.");
   if (b.sesja != null && !/^[0-9a-f-]{36}$/i.test(String(b.sesja))) throw blad400("Zła sesja rozmowy.");
-  return zadanieJson(claudeZadanie(String(b.prompt), b.projekt, b.sesja || null));
+  const projekt = b.projekt || b.autopilot === true ? projektDir(b.projekt) : null;
+  const katalog = b.pomysl && !projekt ? pomyslDir(b.pomysl) : null;
+  if (b.autopilot === true) sprawdzZadanieAutopilota(b.projekt);
+  const autopilot = b.autopilot === true && { proj: projekt, podpis: podpisMontazuAutopilota(projekt) };
+  const brief = projekt ? briefZProjektu(projekt) : kontekstAI({ katalog, dokument: katalog ? czytajJson(path.join(katalog, "pomysl.json"), null) : null });
+  const z = claudeZadanie(`${b.prompt}\n\n${promptKontekstuAI(brief)}`, b.projekt, b.sesja || null, autopilot);
+  z.autopilot = !!autopilot;
+  return zadanieJson(z);
+});
+function sprawdzZadanieAutopilota(nazwa) {
+  if ([...zadania.values()].some((z) => z.projekt === nazwa && z.autopilot && !z.koniec)) {
+    throw Object.assign(new Error("Autopilot nadal pracuje nad tą rolką."), { status: 409 });
+  }
+}
+trasa("POST", /^\/api\/projekt\/([^/]+)\/audyt-autopilota$/, (m) => {
+  const nazwa = decodeURIComponent(m[1]), p = projektDir(nazwa);
+  sprawdzZadanieAutopilota(nazwa);
+  const z = noweZadanie("Recenzja montażu", process.execPath, [path.join(ROOT, "scripts", "audyt-autopilota.mjs"), p], { projekt: nazwa });
+  z.autopilot = true;
+  return zadanieJson(z);
+});
+trasa("POST", /^\/api\/projekt\/([^/]+)\/poprawka-sceny$/, async (m, req) => {
+  const nazwa = decodeURIComponent(m[1]), projekt = projektDir(nazwa), plik = path.join(projekt, "scenariusz.json");
+  const { zrodlo, numer, scena } = (await body(req)) || {};
+  const a = stanAudytuAutopilota(projekt), P = czytajJson(plik, null);
+  if (!a?.aktualny) throw konflikt("Sprawdź aktualny montaż przed przygotowaniem poprawki.");
+  const uwagi = zrodlo === "ai" ? a.recenzja?.uwagi : zrodlo === "obraz" ? a.obraz?.problemy : null;
+  const u = Number.isSafeInteger(numer) && uwagi?.[numer];
+  const w = Number.isSafeInteger(scena) && P?.scenariusz?.[scena];
+  if (!u || !w || w.zablokowany || !(w.do > w.od)) throw blad400("Wybierz aktualną uwagę i odblokowaną scenę.");
+  if ([...zadania.values()].some((z) => z.rezyseria === plik && !z.koniec)) throw konflikt("Reżyseria tej rolki jest już w trakcie przygotowania.");
+  const uwaga = { od: u.od, do: u.do, problem: u.co || u.opis, poprawka: u.zalecenie || u.propozycja };
+  const z = noweZadanie("Podgląd poprawki sceny", process.execPath, [path.join(ROOT, "scripts", "rezyseruj.mjs"), plik, String(scena), "--podglad-poprawki"], {
+    projekt: nazwa, stdin: JSON.stringify(uwaga), parser: odczytajPodglad,
+  });
+  z.rezyseria = plik;
+  z.poprawka = { rodzaj: "scena", scena, podpis: a.podpis, wersjaSceny: JSON.stringify(porzadkujRezyserie([w])[0]) };
+  return zadanieJson(z);
+});
+trasa("PUT", /^\/api\/projekt\/([^/]+)\/poprawka-sceny$/, async (m, req) => {
+  const nazwa = decodeURIComponent(m[1]), projekt = projektDir(nazwa), plik = path.join(projekt, "scenariusz.json");
+  const b = await body(req), z = zadania.get(b?.zadanie);
+  if (z?.kod !== 0 || z.projekt !== nazwa || z.poprawka?.rodzaj !== "scena" || !z.wynik) throw blad400("Otwórz aktualny podgląd sceny.");
+  const a = stanAudytuAutopilota(projekt), P = czytajJson(plik, null), { scena, podpis, wersjaSceny } = z.poprawka;
+  const w = P?.scenariusz?.[scena], propozycja = JSON.parse(z.wynik);
+  if (!a?.aktualny || a.podpis !== podpis || !w || w.zablokowany || wersjaSceny !== propozycja.wersja || wersjaSceny !== JSON.stringify(porzadkujRezyserie([w])[0])) {
+    throw konflikt("Scena lub montaż się zmieniły. Przygotuj poprawkę ponownie.");
+  }
+  const preferencja = preferencjaPoprawki(b);
+  P.scenariusz[scena] = { ...w, rezyseria: normalizujRezyserie(propozycja.rezyseria, w) };
+  zapiszDokumentRezyserii(plik, P);
+  if (preferencja) zapiszPreferencjeAI(b.zapamietaj === "projekt" ? projekt : null, [preferencja]);
+  z.poprawka = null;
+  return { scena: P.scenariusz[scena] };
 });
 trasa("GET", /^\/api\/zadania$/, () => [...zadania.values()].slice(-30).map(zadanieJson));
 trasa("GET", /^\/api\/zadanie\/([\w-]+)$/, (m) => { const z = zadania.get(m[1]); if (!z) throw blad400("Nie ma zadania."); return zadanieJson(z); });
 trasa("POST", /^\/api\/zadanie\/([\w-]+)\/stop$/, (m) => {
   const z = zadania.get(m[1]);
-  if (z && !z.koniec) { if (IS_WIN) spawnSync("taskkill", ["/pid", String(z.proc.pid), "/T", "/F"]); else z.proc.kill(); }
+  if (z && !z.koniec) {
+    z.przerwano = true;
+    if (IS_WIN) spawnSync("taskkill", ["/pid", String(z.proc.pid), "/T", "/F"]);
+    else z.proc.kill();
+  }
   return { ok: true };
 });
 trasa("POST", /^\/api\/otworz$/, async (m, req) => {
@@ -890,7 +1239,7 @@ async function obsluz(req, res) {
       if (!z) { res.writeHead(404); return res.end(); }
       res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" });
       res.write(`data: ${JSON.stringify({ start: true, linie: z.linie, postep: z.postep })}\n\n`);
-      if (z.koniec) { res.write(`data: ${JSON.stringify({ koniec: true, kod: z.kod, wynik: z.wynik, sesja: z.sesja })}\n\n`); return res.end(); }
+      if (z.koniec) { res.write(`data: ${JSON.stringify({ koniec: true, kod: z.kod, wynik: z.wynik, sesja: z.sesja, audyt: z.audyt })}\n\n`); return res.end(); }
       z.sluchacze.add(res);
       req.on("close", () => z.sluchacze.delete(res));
       return;
@@ -903,8 +1252,10 @@ async function obsluz(req, res) {
       if (!p.startsWith(baza)) { res.writeHead(403); return res.end(); }
       if (/[\\/]index\.html$/.test(p) && fs.existsSync(p)) {
         // fonty marki z Google Fonts (render dostaje je od kompilatora HyperFrames, przeglądarka nie)
-        const f = zastosujStyl(wczytajConfig(), czytajJson(path.join(baza, "rolka.json"), {}).styl).fonty || {};
-        const rodz = [f.naglowki, f.tekst].filter(Boolean).map((n) => `family=${encodeURIComponent(n).replace(/%20/g, "+")}:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600`).join("&");
+      const rolka = czytajJson(path.join(baza, "rolka.json"), {});
+      const idPodgladu = komp[2].match(/^\.podglady-stylow\/([\w-]+)\//)?.[1];
+      const f = stylMontazu(idPodgladu || rolka.montaz)?.fonty || zastosujStyl(wczytajConfig(), rolka.styl).fonty || {};
+      const rodz = [...new Set([f.naglowki, f.tekst])].filter(Boolean).map((n) => `family=${encodeURIComponent(n).replace(/%20/g, "+")}:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600`).join("&");
         const html = fs.readFileSync(p, "utf8").replace("<head>", `<head>\n    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?${rodz}&display=block" />`);
         res.writeHead(200, { "Content-Type": MIME[".html"], "Cache-Control": "no-cache" });
         return res.end(html);
